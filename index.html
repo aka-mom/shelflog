@@ -253,7 +253,7 @@
       <button class="btn" onclick="closeAdd()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
     </div>
     <div class="add-form">
-      <div class="form-group">
+      <div class="form-group" id="poster-form-group">
         <label class="form-label">Poster</label>
         <div class="poster-upload" id="poster-upload" onclick="document.getElementById('f-poster').click()">
           <img id="poster-preview" style="display:none">
@@ -402,6 +402,7 @@ function saveToStorage() {
 }
 
 function loadFromStorage() {
+  items = [];
   try {
     const stored = localStorage.getItem('shelflog-items');
     const storedId = localStorage.getItem('shelflog-nextId');
@@ -414,7 +415,34 @@ function loadFromStorage() {
 
 let items = [];
 let nextId = 1;
+let isSignedIn = false;
 loadFromStorage();
+
+window.onAtprotoSignedIn = async function(){
+  isSignedIn = true;
+  document.getElementById('poster-form-group').style.display = 'none';
+  const localItems = items;
+  items = await window.atprotoListItems();
+  renderStats(); renderGrid();
+  if (localItems.length) {
+    const publish = confirm(`You have ${localItems.length} item(s) saved on this browser that aren't in your atproto account yet. Publish them now?`);
+    if (publish) {
+      for (const it of localItems) {
+        const { id, poster, ...fields } = it;
+        const rkey = await window.atprotoCreateItem(fields);
+        items.push({ ...it, id: rkey, poster: null });
+      }
+      renderStats(); renderGrid();
+    }
+  }
+};
+
+window.onAtprotoSignedOut = function(){
+  isSignedIn = false;
+  document.getElementById('poster-form-group').style.display = 'flex';
+  loadFromStorage();
+  renderStats(); renderGrid();
+};
 
 
 let activeType = 'all';
@@ -774,7 +802,7 @@ function renderGrid() {
     const coverStyle = item.poster
       ? `background-image:url('${item.poster}');background-size:cover;background-position:center`
       : `background:${SETTINGS.categoriesEnabled ? tm.bg+'18' : 'var(--card)'}`;
-    return `<div class="card" onclick="openDetail(${item.id})">
+    return `<div class="card" onclick="openDetail('${item.id}')">
       <div class="card-cover" style="${coverStyle}">${(item.poster || !SETTINGS.categoriesEnabled) ? '' : `<span style="font-size:36px">${tm.icon}</span>`}
         ${item.completed ? `<span class="card-check" title="Completed"><i class="ti ti-check" aria-hidden="true"></i></span>` : ''}
         <span class="card-badge" style="background:${sm.bg};color:${sm.text}">${sm.label}</span>
@@ -800,7 +828,7 @@ function filterType(type){
 }
 
 function openDetail(id){
-  const item=items.find(i=>i.id===id); if(!item) return;
+  const item=items.find(i=>String(i.id)===String(id)); if(!item) return;
   const tm=TYPE_META[item.type]||TYPE_META.other;
   const sm=STATUS_META[item.status]||STATUS_META.other;
   const typeLabel=(item.type==='other'&&item.customType)?item.customType:tm.label;
@@ -825,7 +853,7 @@ function openDetail(id){
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn" onclick="deleteItem(${item.id})"><i class="ti ti-trash" aria-hidden="true"></i> Remove</button>
+      <button class="btn" onclick="deleteItem('${item.id}')"><i class="ti ti-trash" aria-hidden="true"></i> Remove</button>
       <button class="btn btn-primary" onclick="closeDetail()">Done</button>
     </div>
   `;
@@ -841,9 +869,15 @@ function toggleOtherType(){
   document.getElementById('f-other-type-wrap').style.display = isOther ? 'flex' : 'none';
 }
 
-function deleteItem(id){
-  items=items.filter(i=>i.id!==id);
-  closeDetail(); renderStats(); renderGrid(); saveToStorage();
+async function deleteItem(id){
+  if (isSignedIn) {
+    await window.atprotoDeleteItem(id);
+    items=items.filter(i=>String(i.id)!==String(id));
+    closeDetail(); renderStats(); renderGrid();
+  } else {
+    items=items.filter(i=>String(i.id)!==String(id));
+    closeDetail(); renderStats(); renderGrid(); saveToStorage();
+  }
 }
 
 function previewPoster(){
@@ -890,9 +924,9 @@ function addItem(){
   const pendingTag=document.getElementById('f-tag-input').value.trim();
   if (pendingTag && !formTags.includes(pendingTag)) formTags.push(pendingTag);
 
-  function finish(poster){
-    items.unshift({
-      id:nextId++, title,
+  async function finish(poster){
+    const fields = {
+      title,
       creator:document.getElementById('f-creator').value.trim()||'Unknown',
       type: SETTINGS.categoriesEnabled ? document.getElementById('f-type').value : 'other',
       customType: SETTINGS.categoriesEnabled ? document.getElementById('f-other-type').value.trim() : '',
@@ -902,15 +936,23 @@ function addItem(){
       rating: SETTINGS.ratingsEnabled ? (formRating || null) : null,
       review:document.getElementById('f-review').value.trim(),
       tags: formTags.slice(),
-      poster,
-    });
+    };
+
+    if (isSignedIn) {
+      const id = await window.atprotoCreateItem(fields);
+      items.unshift({ ...fields, id, poster: null });
+    } else {
+      items.unshift({ ...fields, id: nextId++, poster });
+      saveToStorage();
+    }
+
     ['f-title','f-creator','f-year','f-review','f-other-type'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('f-completed').checked=false;
     resetPosterUpload();
     resetStarPicker();
     resetTagInput();
     toggleOtherType();
-    closeAdd(); renderStats(); renderGrid(); saveToStorage();
+    closeAdd(); renderStats(); renderGrid();
   }
 
   const file=document.getElementById('f-poster').files[0];
@@ -991,9 +1033,50 @@ import { BrowserOAuthClient } from 'https://esm.sh/@atproto/oauth-client-browser
 import { Agent } from 'https://esm.sh/@atproto/api?bundle';
 
 const CLIENT_ID = 'https://aka-mom.github.io/shelflog/client-metadata.json';
+const ITEM_COLLECTION = 'com.shelflog.item';
 
 let oauthClient = null;
 let currentAgent = null;
+let currentDid = null;
+
+function recordToItem(rec){
+  const v = rec.value;
+  return {
+    id: rec.uri.split('/').pop(),
+    title: v.title, creator: v.creator, type: v.type, customType: v.customType || '',
+    status: v.status, completed: !!v.completed, year: v.year || '',
+    rating: v.rating ?? null, review: v.review || '', tags: v.tags || [],
+    poster: null,
+  };
+}
+
+window.atprotoListItems = async function(){
+  const out = [];
+  let cursor;
+  do {
+    const res = await currentAgent.com.atproto.repo.listRecords({
+      repo: currentDid, collection: ITEM_COLLECTION, limit: 100, cursor,
+    });
+    out.push(...res.data.records.map(recordToItem));
+    cursor = res.data.cursor;
+  } while (cursor);
+  return out.reverse();
+};
+
+window.atprotoCreateItem = async function(fields){
+  const record = { '$type': ITEM_COLLECTION, ...fields, poster: undefined, createdAt: new Date().toISOString() };
+  delete record.poster;
+  const res = await currentAgent.com.atproto.repo.createRecord({
+    repo: currentDid, collection: ITEM_COLLECTION, record,
+  });
+  return res.data.uri.split('/').pop();
+};
+
+window.atprotoDeleteItem = async function(rkey){
+  await currentAgent.com.atproto.repo.deleteRecord({
+    repo: currentDid, collection: ITEM_COLLECTION, rkey,
+  });
+};
 
 async function init(){
   try {
@@ -1016,6 +1099,7 @@ async function init(){
 
 async function onSignedIn(session){
   currentAgent = new Agent(session);
+  currentDid = session.did;
   let handle = session.did;
   try {
     const desc = await currentAgent.com.atproto.repo.describeRepo({ repo: session.did });
@@ -1024,6 +1108,7 @@ async function onSignedIn(session){
     console.warn('Could not resolve handle, showing DID instead:', err);
   }
   window.renderAuthArea({ handle, did: session.did });
+  await window.onAtprotoSignedIn();
 }
 
 window.atprotoSignIn = async function(handle){
@@ -1037,7 +1122,9 @@ window.atprotoSignOut = async function(){
     try { await oauthClient.revoke(currentAgent.session.did); } catch (err) { console.warn(err); }
   }
   currentAgent = null;
+  currentDid = null;
   window.renderAuthArea(null);
+  window.onAtprotoSignedOut();
 };
 
 init();

@@ -183,6 +183,12 @@
     <div style="padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:22px">
 
       <div>
+        <div class="modal-section">Profile</div>
+        <div id="profileSection"></div>
+        <input type="file" id="avatar-file" accept="image/*" style="display:none" onchange="onAvatarFileChange()">
+      </div>
+
+      <div>
         <div class="modal-section">Features</div>
         <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
           <input type="checkbox" id="setting-ratings" style="width:auto">
@@ -416,11 +422,29 @@ function loadFromStorage() {
 let items = [];
 let nextId = 1;
 let isSignedIn = false;
+let signedInHandle = null;
+let atprotoProfile = null;
+let customAvatar = null;
+
+function loadAvatarFromStorage(){
+  try { customAvatar = localStorage.getItem('shelflog-avatar'); } catch (e) { /* ignore */ }
+}
+loadAvatarFromStorage();
+
+function getDisplayAvatar(atprotoAvatarUrl){
+  return customAvatar || atprotoAvatarUrl || null;
+}
 loadFromStorage();
 
-window.onAtprotoSignedIn = async function(){
+window.onAtprotoSignedIn = async function(handle, did){
   isSignedIn = true;
+  signedInHandle = handle;
   document.getElementById('poster-form-group').style.display = 'none';
+  renderAuthArea({ handle, avatar: getDisplayAvatar(null) });
+
+  atprotoProfile = await window.atprotoGetProfile();
+  renderAuthArea({ handle, avatar: getDisplayAvatar(atprotoProfile && atprotoProfile.avatar) });
+
   const localItems = items;
   items = await window.atprotoListItems();
   renderStats(); renderGrid();
@@ -439,6 +463,8 @@ window.onAtprotoSignedIn = async function(){
 
 window.onAtprotoSignedOut = function(){
   isSignedIn = false;
+  signedInHandle = null;
+  atprotoProfile = null;
   document.getElementById('poster-form-group').style.display = 'flex';
   loadFromStorage();
   renderStats(); renderGrid();
@@ -603,7 +629,57 @@ function openSettings(){
   document.getElementById('setting-label-review').value = SETTINGS.fieldLabels.review;
   editingStatusKey = null;
   renderStatusList();
+  renderProfileSection();
   document.getElementById('settingsModal').classList.add('open');
+}
+
+function renderProfileSection(){
+  const el = document.getElementById('profileSection');
+  if (!isSignedIn) {
+    el.innerHTML = `<div style="font-size:13px;color:var(--muted-light)">Sign in with atproto to see your profile here.</div>`;
+    return;
+  }
+  const avatar = getDisplayAvatar(atprotoProfile && atprotoProfile.avatar);
+  const avatarImg = avatar
+    ? `<img src="${avatar}" style="width:56px;height:56px;border-radius:50%;object-fit:cover">`
+    : `<div style="width:56px;height:56px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center"><i class="ti ti-user" style="font-size:24px;color:var(--muted-light)" aria-hidden="true"></i></div>`;
+  const joined = (atprotoProfile && atprotoProfile.createdAt)
+    ? new Date(atprotoProfile.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : 'Unknown';
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">
+      ${avatarImg}
+      <div>
+        <div style="font-size:14px;font-weight:500;color:var(--ink)">@${signedInHandle}</div>
+        <div style="font-size:12px;color:var(--muted)">Joined ${joined}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="document.getElementById('avatar-file').click()">Change picture</button>
+      ${customAvatar ? `<button class="btn" onclick="resetAvatar()">Use atproto picture</button>` : ''}
+    </div>
+  `;
+}
+
+function onAvatarFileChange(){
+  const file = document.getElementById('avatar-file').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    customAvatar = e.target.result;
+    try { localStorage.setItem('shelflog-avatar', customAvatar); } catch (err) { /* ignore */ }
+    renderProfileSection();
+    renderAuthArea({ handle: signedInHandle, avatar: getDisplayAvatar(atprotoProfile && atprotoProfile.avatar) });
+  };
+  reader.readAsDataURL(file);
+}
+
+function resetAvatar(){
+  customAvatar = null;
+  try { localStorage.removeItem('shelflog-avatar'); } catch (err) { /* ignore */ }
+  renderProfileSection();
+  renderAuthArea({ handle: signedInHandle, avatar: getDisplayAvatar(atprotoProfile && atprotoProfile.avatar) });
 }
 
 function closeSettings(){
@@ -977,9 +1053,12 @@ applySettings();
 function renderAuthArea(state){
   const el = document.getElementById('authArea');
   if (state && state.handle) {
+    const avatarHtml = state.avatar
+      ? `<img src="${state.avatar}" style="width:20px;height:20px;border-radius:50%;object-fit:cover">`
+      : `<i class="ti ti-circle-check" style="color:var(--teal)" aria-hidden="true"></i>`;
     el.innerHTML = `
       <span style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">
-        <i class="ti ti-circle-check" style="color:var(--teal)" aria-hidden="true"></i>
+        ${avatarHtml}
         @${state.handle}
         <button class="btn" onclick="window.atprotoSignOut()" style="padding:4px 9px;font-size:11px">Sign out</button>
       </span>`;
@@ -1078,6 +1157,16 @@ window.atprotoDeleteItem = async function(rkey){
   });
 };
 
+window.atprotoGetProfile = async function(){
+  try {
+    const res = await currentAgent.app.bsky.actor.getProfile({ actor: currentDid });
+    return res.data;
+  } catch (err) {
+    console.warn('Could not fetch atproto profile:', err);
+    return null;
+  }
+};
+
 async function init(){
   try {
     oauthClient = await BrowserOAuthClient.load({
@@ -1107,8 +1196,7 @@ async function onSignedIn(session){
   } catch (err) {
     console.warn('Could not resolve handle, showing DID instead:', err);
   }
-  window.renderAuthArea({ handle, did: session.did });
-  await window.onAtprotoSignedIn();
+  await window.onAtprotoSignedIn(handle, session.did);
 }
 
 window.atprotoSignIn = async function(handle){

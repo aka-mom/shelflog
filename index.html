@@ -226,6 +226,26 @@
   </div>
 </div>
 
+<div class="modal-bg" id="signInModal">
+  <div class="modal" style="width:380px">
+    <div class="modal-header">
+      <span style="font-weight:500;font-size:15px;color:var(--ink)">Sign in with atproto</span>
+      <button class="btn" onclick="closeSignIn()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
+    </div>
+    <div style="padding:20px">
+      <div class="form-group">
+        <label class="form-label">Handle</label>
+        <input type="text" id="signin-handle" placeholder="yourname.bsky.social" onkeydown="if(event.key==='Enter')submitSignIn()">
+      </div>
+      <div id="signin-error" style="display:none;font-size:12px;color:var(--rating-low);margin-top:8px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="closeSignIn()">Cancel</button>
+        <button class="btn btn-primary" id="signin-continue" onclick="submitSignIn()">Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="addModal">
   <div class="modal">
     <div class="modal-header">
@@ -922,10 +942,48 @@ function renderAuthArea(state){
         <button class="btn" onclick="window.atprotoSignOut()" style="padding:4px 9px;font-size:11px">Sign out</button>
       </span>`;
   } else {
-    el.innerHTML = `<button class="btn" onclick="window.atprotoSignIn()"><i class="ti ti-cloud" aria-hidden="true"></i> Sign in with atproto</button>`;
+    el.innerHTML = `<button class="btn" onclick="openSignIn()"><i class="ti ti-cloud" aria-hidden="true"></i> Sign in with atproto</button>`;
   }
 }
 renderAuthArea(null);
+
+function openSignIn(){
+  document.getElementById('signin-handle').value = '';
+  document.getElementById('signin-error').style.display = 'none';
+  document.getElementById('signin-continue').disabled = false;
+  document.getElementById('signin-continue').textContent = 'Continue';
+  document.getElementById('signInModal').classList.add('open');
+  document.getElementById('signin-handle').focus();
+}
+
+function closeSignIn(){
+  document.getElementById('signInModal').classList.remove('open');
+}
+
+async function submitSignIn(){
+  const handle = document.getElementById('signin-handle').value.trim();
+  const errEl = document.getElementById('signin-error');
+  errEl.style.display = 'none';
+  if (!handle) {
+    errEl.textContent = 'Please enter your handle.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const btn = document.getElementById('signin-continue');
+  btn.disabled = true;
+  btn.textContent = 'Redirecting...';
+  try {
+    await window.atprotoSignIn(handle);
+    // Browser navigates away here; nothing else to do on success.
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Continue';
+    errEl.textContent = 'Sign-in failed: ' + err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+document.getElementById('signInModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeSignIn(); });
 </script>
 
 <script type="module">
@@ -968,17 +1026,10 @@ async function onSignedIn(session){
   window.renderAuthArea({ handle, did: session.did });
 }
 
-window.atprotoSignIn = async function(){
-  if (!oauthClient) { alert('Sign-in is still loading, try again in a moment.'); return; }
-  const handle = prompt('Enter your atproto handle (e.g. yourname.bsky.social):');
-  if (!handle) return;
-  try {
-    await oauthClient.signIn(handle.trim(), {});
-    // Browser navigates away to the PDS's consent screen here.
-  } catch (err) {
-    console.error('atproto sign-in failed:', err);
-    alert('Sign-in failed: ' + err.message);
-  }
+window.atprotoSignIn = async function(handle){
+  if (!oauthClient) throw new Error('Sign-in is still loading, try again in a moment.');
+  await oauthClient.signIn(handle, {});
+  // Browser navigates away to the PDS's consent screen here.
 };
 
 window.atprotoSignOut = async function(){

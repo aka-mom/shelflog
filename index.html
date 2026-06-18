@@ -110,7 +110,8 @@
     </div>
     <span id="appName">shelflog</span>
   </div>
-  <div style="display:flex;gap:8px">
+  <div style="display:flex;gap:8px;align-items:center">
+    <div id="authArea"></div>
     <button class="btn" onclick="openSettings()" aria-label="Settings">
       <i class="ti ti-settings" aria-hidden="true"></i>
     </button>
@@ -910,6 +911,85 @@ document.getElementById('settingsModal').addEventListener('click',e=>{if(e.targe
 populateTypeSelect();
 populateStatusSelect();
 applySettings();
+
+function renderAuthArea(state){
+  const el = document.getElementById('authArea');
+  if (state && state.handle) {
+    el.innerHTML = `
+      <span style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">
+        <i class="ti ti-circle-check" style="color:var(--teal)" aria-hidden="true"></i>
+        @${state.handle}
+        <button class="btn" onclick="window.atprotoSignOut()" style="padding:4px 9px;font-size:11px">Sign out</button>
+      </span>`;
+  } else {
+    el.innerHTML = `<button class="btn" onclick="window.atprotoSignIn()"><i class="ti ti-cloud" aria-hidden="true"></i> Sign in with atproto</button>`;
+  }
+}
+renderAuthArea(null);
+</script>
+
+<script type="module">
+import { BrowserOAuthClient } from 'https://esm.sh/@atproto/oauth-client-browser';
+import { Agent } from 'https://esm.sh/@atproto/api';
+
+const CLIENT_ID = 'https://aka-mom.github.io/shelflog/client-metadata.json';
+
+let oauthClient = null;
+let currentAgent = null;
+
+async function init(){
+  try {
+    oauthClient = await BrowserOAuthClient.load({
+      clientId: CLIENT_ID,
+      handleResolver: 'https://bsky.social',
+    });
+
+    const result = await oauthClient.init();
+    if (result) {
+      await onSignedIn(result.session);
+    } else {
+      window.renderAuthArea(null);
+    }
+  } catch (err) {
+    console.error('atproto OAuth init failed:', err);
+    window.renderAuthArea(null);
+  }
+}
+
+async function onSignedIn(session){
+  currentAgent = new Agent(session);
+  let handle = session.did;
+  try {
+    const desc = await currentAgent.com.atproto.repo.describeRepo({ repo: session.did });
+    handle = desc.data.handle;
+  } catch (err) {
+    console.warn('Could not resolve handle, showing DID instead:', err);
+  }
+  window.renderAuthArea({ handle, did: session.did });
+}
+
+window.atprotoSignIn = async function(){
+  if (!oauthClient) { alert('Sign-in is still loading, try again in a moment.'); return; }
+  const handle = prompt('Enter your atproto handle (e.g. yourname.bsky.social):');
+  if (!handle) return;
+  try {
+    await oauthClient.signIn(handle.trim(), {});
+    // Browser navigates away to the PDS's consent screen here.
+  } catch (err) {
+    console.error('atproto sign-in failed:', err);
+    alert('Sign-in failed: ' + err.message);
+  }
+};
+
+window.atprotoSignOut = async function(){
+  if (oauthClient && currentAgent) {
+    try { await oauthClient.revoke(currentAgent.session.did); } catch (err) { console.warn(err); }
+  }
+  currentAgent = null;
+  window.renderAuthArea(null);
+};
+
+init();
 </script>
 </body>
 </html>

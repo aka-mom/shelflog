@@ -94,54 +94,71 @@
     .tag-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 10px; background: var(--lime); color: var(--dark); }
     .tag-chip .ti { font-size: 12px; cursor: pointer; }
     .mini-tag { display: inline-flex; font-size: 10px; padding: 2px 7px; border-radius: 8px; background: var(--border); color: var(--muted); margin-right: 4px; }
+    #authGate { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+    #topbarAvatarBtn img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; display: block; }
   </style>
 </head>
 <body>
 
 <h2 class="sr-only">Shelflog — personal physical media tracker</h2>
 
-<div class="topbar">
-  <div class="logo">
-    <div class="logo-icon">
-      <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 2L16 6.5V11.5L9 16L2 11.5V6.5L9 2Z" fill="#010807"/>
-        <path d="M6 9L8.5 11.5L13 7" stroke="#d2f63b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </div>
-    <span id="appName">shelflog</span>
+<div id="authGate">
+  <div class="logo-icon" style="width:48px;height:48px;margin-bottom:18px">
+    <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:30px;height:30px">
+      <path d="M9 2L16 6.5V11.5L9 16L2 11.5V6.5L9 2Z" fill="#010807"/>
+      <path d="M6 9L8.5 11.5L13 7" stroke="#d2f63b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
   </div>
-  <div style="display:flex;gap:8px;align-items:center">
-    <div id="authArea"></div>
-    <button class="btn" onclick="openSettings()" aria-label="Settings">
-      <i class="ti ti-settings" aria-hidden="true"></i>
-    </button>
-    <button class="btn btn-primary" onclick="openAdd()">
-      <i class="ti ti-plus" aria-hidden="true"></i> <span id="addBtnLabel">log something</span>
-    </button>
-  </div>
+  <div style="font-size:18px;font-weight:500;color:var(--ink);margin-bottom:6px">shelflog</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Sign in with atproto to see your media log.</div>
+  <button class="btn btn-primary" onclick="openSignIn()">
+    <i class="ti ti-cloud" aria-hidden="true"></i> Sign in with atproto
+  </button>
 </div>
 
-<div class="layout">
-  <aside class="sidebar" id="sidebar" style="display:flex;flex-direction:column">
-    <nav class="side-nav" id="sideNav"></nav>
-    <button class="btn" style="width:100%;justify-content:center;margin-top:14px" onclick="openCategoryModal()">
-      <i class="ti ti-settings" aria-hidden="true"></i> Manage categories
-    </button>
-  </aside>
-
-  <main class="main">
-    <div class="stats-bar" id="statsBar"></div>
-
-    <div class="search-row">
-      <div class="search-wrap">
-        <i class="ti ti-search" aria-hidden="true"></i>
-        <input type="text" placeholder="Search..." id="searchInput" oninput="renderGrid()">
+<div id="appShell" style="display:none">
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 2L16 6.5V11.5L9 16L2 11.5V6.5L9 2Z" fill="#010807"/>
+          <path d="M6 9L8.5 11.5L13 7" stroke="#d2f63b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
       </div>
+      <span id="appName">shelflog</span>
     </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn" id="topbarAvatarBtn" onclick="openProfile()" aria-label="Profile" style="padding:4px 9px"></button>
+      <button class="btn btn-primary" onclick="openAdd()">
+        <i class="ti ti-plus" aria-hidden="true"></i> <span id="addBtnLabel">log something</span>
+      </button>
+    </div>
+  </div>
 
-    <div class="grid-heading" id="gridHeading"></div>
-    <div class="grid" id="mediaGrid"></div>
-  </main>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar" style="display:flex;flex-direction:column">
+      <button class="side-link" onclick="openProfile()"><i class="ti ti-user-circle" aria-hidden="true"></i> Profile</button>
+      <nav class="side-nav" id="sideNav" style="margin-top:10px"></nav>
+      <div style="margin-top:auto">
+        <button class="side-link" onclick="openSettings()"><i class="ti ti-settings" aria-hidden="true"></i> Settings</button>
+        <button class="side-link" onclick="window.atprotoSignOut()"><i class="ti ti-logout" aria-hidden="true"></i> Sign out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="stats-bar" id="statsBar"></div>
+
+      <div class="search-row">
+        <div class="search-wrap">
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input type="text" placeholder="Search..." id="searchInput" oninput="renderGrid()">
+        </div>
+      </div>
+
+      <div class="grid-heading" id="gridHeading"></div>
+      <div class="grid" id="mediaGrid"></div>
+    </main>
+  </div>
 </div>
 
 <div class="modal-bg" id="detailModal">
@@ -183,9 +200,8 @@
     <div style="padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:22px">
 
       <div>
-        <div class="modal-section">Profile</div>
-        <div id="profileSection"></div>
-        <input type="file" id="avatar-file" accept="image/*" style="display:none" onchange="onAvatarFileChange()">
+        <div class="modal-section">Categories</div>
+        <button class="btn" onclick="openCategoryModal()"><i class="ti ti-tags" aria-hidden="true"></i> Manage categories</button>
       </div>
 
       <div>
@@ -248,6 +264,19 @@
         <button class="btn" onclick="closeSignIn()">Cancel</button>
         <button class="btn btn-primary" id="signin-continue" onclick="submitSignIn()">Continue</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="profileModal">
+  <div class="modal" style="width:380px">
+    <div class="modal-header">
+      <span style="font-weight:500;font-size:15px;color:var(--ink)">Profile</span>
+      <button class="btn" onclick="closeProfile()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
+    </div>
+    <div style="padding:20px">
+      <div id="profileSection"></div>
+      <input type="file" id="avatar-file" accept="image/*" style="display:none" onchange="onAvatarFileChange()">
     </div>
   </div>
 </div>
@@ -440,10 +469,12 @@ window.onAtprotoSignedIn = async function(handle, did){
   isSignedIn = true;
   signedInHandle = handle;
   document.getElementById('poster-form-group').style.display = 'none';
-  renderAuthArea({ handle, avatar: getDisplayAvatar(null) });
+  applyAuthGate();
+  renderSidebar();
+  renderTopbarAvatar(getDisplayAvatar(null));
 
   atprotoProfile = await window.atprotoGetProfile();
-  renderAuthArea({ handle, avatar: getDisplayAvatar(atprotoProfile && atprotoProfile.avatar) });
+  renderTopbarAvatar(getDisplayAvatar(atprotoProfile && atprotoProfile.avatar));
 
   const localItems = items;
   items = await window.atprotoListItems();
@@ -468,6 +499,9 @@ window.onAtprotoSignedOut = function(){
   document.getElementById('poster-form-group').style.display = 'flex';
   loadFromStorage();
   renderStats(); renderGrid();
+  applyAuthGate();
+  closeProfile();
+  closeSettings();
 };
 
 
@@ -620,6 +654,15 @@ function uniqueKey(base){
   return key;
 }
 
+function openProfile(){
+  renderProfileSection();
+  document.getElementById('profileModal').classList.add('open');
+}
+
+function closeProfile(){
+  document.getElementById('profileModal').classList.remove('open');
+}
+
 function openSettings(){
   document.getElementById('setting-ratings').checked = SETTINGS.ratingsEnabled;
   document.getElementById('setting-categories').checked = SETTINGS.categoriesEnabled;
@@ -629,7 +672,6 @@ function openSettings(){
   document.getElementById('setting-label-review').value = SETTINGS.fieldLabels.review;
   editingStatusKey = null;
   renderStatusList();
-  renderProfileSection();
   document.getElementById('settingsModal').classList.add('open');
 }
 
@@ -670,7 +712,7 @@ function onAvatarFileChange(){
     customAvatar = e.target.result;
     try { localStorage.setItem('shelflog-avatar', customAvatar); } catch (err) { /* ignore */ }
     renderProfileSection();
-    renderAuthArea({ handle: signedInHandle, avatar: getDisplayAvatar(atprotoProfile && atprotoProfile.avatar) });
+    renderTopbarAvatar(getDisplayAvatar(atprotoProfile && atprotoProfile.avatar));
   };
   reader.readAsDataURL(file);
 }
@@ -679,7 +721,7 @@ function resetAvatar(){
   customAvatar = null;
   try { localStorage.removeItem('shelflog-avatar'); } catch (err) { /* ignore */ }
   renderProfileSection();
-  renderAuthArea({ handle: signedInHandle, avatar: getDisplayAvatar(atprotoProfile && atprotoProfile.avatar) });
+  renderTopbarAvatar(getDisplayAvatar(atprotoProfile && atprotoProfile.avatar));
 }
 
 function closeSettings(){
@@ -1045,28 +1087,24 @@ document.getElementById('detailModal').addEventListener('click',e=>{if(e.target=
 document.getElementById('addModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeAdd();});
 document.getElementById('categoryModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeCategoryModal();});
 document.getElementById('settingsModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeSettings();});
+document.getElementById('profileModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeProfile();});
 
 populateTypeSelect();
 populateStatusSelect();
 applySettings();
 
-function renderAuthArea(state){
-  const el = document.getElementById('authArea');
-  if (state && state.handle) {
-    const avatarHtml = state.avatar
-      ? `<img src="${state.avatar}" style="width:20px;height:20px;border-radius:50%;object-fit:cover">`
-      : `<i class="ti ti-circle-check" style="color:var(--teal)" aria-hidden="true"></i>`;
-    el.innerHTML = `
-      <span style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">
-        ${avatarHtml}
-        @${state.handle}
-        <button class="btn" onclick="window.atprotoSignOut()" style="padding:4px 9px;font-size:11px">Sign out</button>
-      </span>`;
-  } else {
-    el.innerHTML = `<button class="btn" onclick="openSignIn()"><i class="ti ti-cloud" aria-hidden="true"></i> Sign in with atproto</button>`;
-  }
+function renderTopbarAvatar(avatarUrl){
+  const btn = document.getElementById('topbarAvatarBtn');
+  btn.innerHTML = avatarUrl
+    ? `<img src="${avatarUrl}">`
+    : `<i class="ti ti-user-circle" aria-hidden="true"></i>`;
 }
-renderAuthArea(null);
+
+function applyAuthGate(){
+  document.getElementById('authGate').style.display = isSignedIn ? 'none' : 'flex';
+  document.getElementById('appShell').style.display = isSignedIn ? 'block' : 'none';
+}
+applyAuthGate();
 
 function openSignIn(){
   document.getElementById('signin-handle').value = '';
@@ -1177,12 +1215,9 @@ async function init(){
     const result = await oauthClient.init();
     if (result) {
       await onSignedIn(result.session);
-    } else {
-      window.renderAuthArea(null);
     }
   } catch (err) {
     console.error('atproto OAuth init failed:', err);
-    window.renderAuthArea(null);
   }
 }
 
@@ -1211,7 +1246,6 @@ window.atprotoSignOut = async function(){
   }
   currentAgent = null;
   currentDid = null;
-  window.renderAuthArea(null);
   window.onAtprotoSignedOut();
 };
 

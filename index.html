@@ -606,6 +606,27 @@ function getDisplayAvatar(atprotoAvatarUrl){
 }
 loadFromStorage();
 
+const DEMO_ITEMS = [
+  { title:'The Matrix', creator:'Wachowski Sisters', type:'movie', customType:'', status:'digital', completed:true, year:'1999', rating:5, review:"Redefined what sci-fi action could look like.", tags:['cyberpunk','classic'], genres:['action','sci-fi'] },
+  { title:'The Bear', creator:'Christopher Storer', type:'tv', customType:'', status:'digital', completed:false, year:'2022', rating:4, review:'Stressful in the best way.', tags:['kitchen'], genres:['drama','comedy'] },
+  { title:'Project Hail Mary', creator:'Andy Weir', type:'book', customType:'', status:'physical', completed:true, year:'2021', rating:5, review:"Couldn't put it down.", tags:['space'], genres:['sci-fi'] },
+  { title:'Random Access Memories', creator:'Daft Punk', type:'music', customType:'', status:'physical', completed:false, year:'2013', rating:4, review:'', tags:['electronic'], genres:[] },
+  { title:'Hamilton', creator:'Lin-Manuel Miranda', type:'musical', customType:'', status:'rented', completed:true, year:'2015', rating:5, review:'Worth the hype.', tags:['broadway'], genres:['drama'] },
+  { title:'The Importance of Being Earnest', creator:'Oscar Wilde', type:'play', customType:'', status:'physical', completed:false, year:'1895', rating:null, review:'', tags:[], genres:['comedy'] },
+  { title:'Hades', creator:'Supergiant Games', type:'game', customType:'', status:'digital', completed:true, year:'2020', rating:5, review:'Tight combat, great story integration.', tags:['roguelike'], genres:['action'] },
+  { title:'It Follows', creator:'David Robert Mitchell', type:'movie', customType:'', status:'rented', completed:true, year:'2014', rating:3, review:'Solid premise, dragged a bit.', tags:[], genres:['horror','thriller'] },
+  { title:'My Octopus Teacher', creator:'Pippa Ehrlich', type:'other', customType:'Documentary film', status:'digital', completed:true, year:'2020', rating:4, review:'Surprisingly emotional.', tags:['nature'], genres:['documentary'] },
+  { title:'Severance', creator:'Dan Erickson', type:'tv', customType:'', status:'digital', completed:false, year:'2022', rating:2, review:'Lost me halfway through season 2.', tags:[], genres:['thriller','sci-fi'] },
+  { title:'Worst Vacation Ever', creator:'Unknown', type:'book', customType:'', status:'physical', completed:false, year:'2023', rating:1, review:'Could not finish.', tags:[], genres:[] },
+];
+
+async function seedDemoData(){
+  for (const demo of DEMO_ITEMS) {
+    const id = await window.atprotoCreateItem(demo);
+    items.push({ ...demo, id, poster: null });
+  }
+}
+
 window.onAtprotoSignedIn = async function(handle, did){
   isSignedIn = true;
   signedInHandle = handle;
@@ -619,6 +640,11 @@ window.onAtprotoSignedIn = async function(handle, did){
 
   const localItems = items;
   items = await window.atprotoListItems();
+
+  if (items.length === 0 && localItems.length === 0) {
+    await seedDemoData();
+  }
+
   renderStats(); renderGrid();
   if (localItems.length) {
     const publish = confirm(`You have ${localItems.length} item(s) saved on this browser that aren't in your atproto account yet. Publish them now?`);

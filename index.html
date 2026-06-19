@@ -24,7 +24,7 @@
     .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: transparent; color: var(--ink); cursor: pointer; font-family: inherit; }
     .btn:hover { background: var(--surface); border-color: var(--teal); }
     .btn-primary { background: var(--lime); color: var(--dark); border-color: var(--lime); font-weight: 500; }
-    .btn-primary:hover { background: #c5ee2a; border-color: #c5ee2a; }
+    .btn-primary:hover { filter: brightness(0.92); }
     .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
     .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
     .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -198,6 +198,16 @@
     </div>
 
     <div style="padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:22px">
+
+      <div>
+        <div class="modal-section">Appearance</div>
+        <select id="setting-theme">
+          <option value="bright">Bright</option>
+          <option value="dark">Dark</option>
+          <option value="pastel">Pastel</option>
+          <option value="sunset">Sunset</option>
+        </select>
+      </div>
 
       <div>
         <div class="modal-section">Categories</div>
@@ -415,7 +425,33 @@ let SETTINGS = {
   appName: 'shelflog',
   addButtonLabel: 'log something',
   fieldLabels: { title:'Title', creator:'Creator', year:'Year', review:'Review / notes' },
+  theme: 'bright',
 };
+
+const THEMES = {
+  bright: { label:'Bright', dark:'#fdfbe9', surface:'#ffffff', card:'#f4f8df', border:'#e1ecb6', ink:'#1f3a14', muted:'#5d7a4a', mutedLight:'#93ad7f', lime:'#aed430', teal:'#00b887', golden:'#f3c623', ratingLow:'#e2533d', ratingMid:'#f0a202' },
+  dark:   { label:'Dark', dark:'#0a140a', surface:'#132013', card:'#182b18', border:'#2a3d28', ink:'#f1fbe9', muted:'#9fcf8c', mutedLight:'#6f9a5e', lime:'#d2f63b', teal:'#1fd9a0', golden:'#f9e34e', ratingLow:'#ff6b52', ratingMid:'#ffb020' },
+  pastel: { label:'Pastel', dark:'#fdf6fb', surface:'#ffffff', card:'#f7eef9', border:'#ead9f0', ink:'#4a3b5c', muted:'#8a7398', mutedLight:'#b5a3c0', lime:'#caa6e0', teal:'#8fc7c1', golden:'#f3c1a8', ratingLow:'#e08a8a', ratingMid:'#eec089' },
+  sunset: { label:'Sunset', dark:'#fff6ee', surface:'#ffffff', card:'#fdeee0', border:'#f3d2b8', ink:'#431225', muted:'#a15a3a', mutedLight:'#c98f6a', lime:'#e8773a', teal:'#c9763f', golden:'#f3c623', ratingLow:'#c0392b', ratingMid:'#e07b1f' },
+};
+
+function applyTheme(key){
+  const t = THEMES[key] || THEMES.bright;
+  const root = document.documentElement.style;
+  root.setProperty('--dark', t.dark);
+  root.setProperty('--surface', t.surface);
+  root.setProperty('--card', t.card);
+  root.setProperty('--border', t.border);
+  root.setProperty('--ink', t.ink);
+  root.setProperty('--muted', t.muted);
+  root.setProperty('--muted-light', t.mutedLight);
+  root.setProperty('--lime', t.lime);
+  root.setProperty('--teal', t.teal);
+  root.setProperty('--golden', t.golden);
+  root.setProperty('--rating-low', t.ratingLow);
+  root.setProperty('--rating-mid', t.ratingMid);
+  root.setProperty('--rating-high', t.golden);
+}
 
 function persistSettings(){
   localStorage.setItem('shelflog-settings', JSON.stringify(SETTINGS));
@@ -664,6 +700,7 @@ function closeProfile(){
 }
 
 function openSettings(){
+  document.getElementById('setting-theme').value = SETTINGS.theme;
   document.getElementById('setting-ratings').checked = SETTINGS.ratingsEnabled;
   document.getElementById('setting-categories').checked = SETTINGS.categoriesEnabled;
   document.getElementById('setting-label-title').value = SETTINGS.fieldLabels.title;
@@ -729,6 +766,7 @@ function closeSettings(){
 }
 
 function saveSettings(){
+  SETTINGS.theme = document.getElementById('setting-theme').value;
   SETTINGS.ratingsEnabled = document.getElementById('setting-ratings').checked;
   SETTINGS.categoriesEnabled = document.getElementById('setting-categories').checked;
   SETTINGS.fieldLabels.title = document.getElementById('setting-label-title').value.trim() || 'Title';
@@ -741,6 +779,7 @@ function saveSettings(){
 }
 
 function applySettings(){
+  applyTheme(SETTINGS.theme);
   document.getElementById('appName').textContent = SETTINGS.appName;
   document.getElementById('addBtnLabel').textContent = SETTINGS.addButtonLabel;
   document.getElementById('label-title').textContent = SETTINGS.fieldLabels.title;

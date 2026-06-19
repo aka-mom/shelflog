@@ -96,6 +96,9 @@
     .tag-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 10px; background: var(--lime); color: var(--dark); }
     .tag-chip .ti { font-size: 12px; cursor: pointer; }
     .mini-tag { display: inline-flex; font-size: 10px; padding: 2px 7px; border-radius: 8px; background: var(--border); color: var(--muted); margin-right: 4px; }
+    .genre-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+    .genre-chip { font-size: 11px; padding: 4px 10px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); color: var(--muted); cursor: pointer; font-family: inherit; }
+    .genre-chip.active { border-color: transparent; font-weight: 500; }
     .theme-preview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
     .theme-preview { border: 2px solid var(--border); border-radius: 10px; padding: 8px; cursor: pointer; text-align: center; }
     .theme-preview:hover { border-color: var(--muted-light); }
@@ -192,6 +195,12 @@
                 <option value="unrated">Unrated</option>
               </select>
             </div>
+            <div class="form-group">
+              <label class="form-label">Genre</label>
+              <select id="filter-genre" onchange="applyFilters()">
+                <option value="all">All</option>
+              </select>
+            </div>
             <button class="btn" onclick="clearFilters()" style="width:100%;justify-content:center">Clear filters</button>
           </div>
         </div>
@@ -232,6 +241,26 @@
   </div>
 </div>
 
+<div class="modal-bg" id="genreModal">
+  <div class="modal" style="width:420px">
+    <div class="modal-header">
+      <span style="font-weight:500;font-size:15px;color:var(--ink)">Manage genres</span>
+      <button class="btn" onclick="closeGenreModal()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
+    </div>
+    <div style="padding:16px 20px;max-height:340px;overflow-y:auto" id="genreList"></div>
+    <div style="padding:16px 20px;border-top:1px solid var(--border)">
+      <div class="form-label" style="margin-bottom:8px">Add new genre</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="new-genre-label" placeholder="Genre name"
+               style="flex:1;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:7px 10px;background:var(--card);color:var(--ink)">
+        <input type="color" id="new-genre-color" value="#84e0d2"
+               style="width:36px;height:34px;border:1px solid var(--border);border-radius:8px;padding:2px;background:var(--card)">
+        <button class="btn btn-primary" onclick="addGenre()">Add</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="settingsModal">
   <div class="modal" style="width:520px;max-height:85vh;display:flex;flex-direction:column">
     <div class="modal-header">
@@ -250,6 +279,11 @@
       <div>
         <div class="modal-section">Categories</div>
         <button class="btn" onclick="openCategoryModal()"><i class="ti ti-tags" aria-hidden="true"></i> Manage categories</button>
+      </div>
+
+      <div>
+        <div class="modal-section">Genres</div>
+        <button class="btn" onclick="openGenreModal()"><i class="ti ti-movie" aria-hidden="true"></i> Manage genres</button>
       </div>
 
       <div>
@@ -389,10 +423,14 @@
         </div>
       </div>
       <div class="form-group">
+        <label class="form-label">Genres</label>
+        <div class="genre-picker" id="genrePicker"></div>
+      </div>
+      <div class="form-group">
         <label class="form-label">Tags</label>
         <div class="tag-input-wrap">
           <span id="tagChips"></span>
-          <input type="text" id="f-tag-input" placeholder="Add a genre and press Enter..." onkeydown="handleTagKeydown(event)">
+          <input type="text" id="f-tag-input" placeholder="Add a tag and press Enter..." onkeydown="handleTagKeydown(event)">
         </div>
       </div>
       <div class="form-group"><label class="form-label" id="label-review">Review / notes</label><textarea id="f-review" placeholder="What did you think?"></textarea></div>
@@ -456,6 +494,31 @@ function loadStatusesFromStorage(){
   }
 }
 loadStatusesFromStorage();
+
+let GENRE_META = {
+  action:      { label:'Action', bg:'#f7b4a4', text:'#431225' },
+  comedy:      { label:'Comedy', bg:'#f3c623', text:'#5c4a00' },
+  drama:       { label:'Drama', bg:'#84e0d2', text:'#0f4a40' },
+  horror:      { label:'Horror', bg:'#431225', text:'#f7b4a4' },
+  romance:     { label:'Romance', bg:'#f4a6c1', text:'#5c2a3a' },
+  'sci-fi':    { label:'Sci-Fi', bg:'#6568ef', text:'#ffffff' },
+  thriller:    { label:'Thriller', bg:'#9f5722', text:'#ffffff' },
+  documentary: { label:'Documentary', bg:'#00b887', text:'#010807' },
+};
+
+function persistGenres(){
+  localStorage.setItem('shelflog-genres', JSON.stringify(GENRE_META));
+}
+
+function loadGenresFromStorage(){
+  try {
+    const saved = localStorage.getItem('shelflog-genres');
+    if (saved) GENRE_META = JSON.parse(saved);
+  } catch (e) {
+    console.warn('Could not load saved genres:', e);
+  }
+}
+loadGenresFromStorage();
 
 let SETTINGS = {
   ratingsEnabled: true,
@@ -584,7 +647,14 @@ window.onAtprotoSignedOut = function(){
 
 
 let activeType = 'all';
-let activeFilters = { status: 'all', completed: 'all', rating: 'all' };
+let activeFilters = { status: 'all', completed: 'all', rating: 'all', genre: 'all' };
+
+function populateFilterGenreSelect(){
+  const sel = document.getElementById('filter-genre');
+  const current = sel.value;
+  sel.innerHTML = '<option value="all">All</option>' + Object.keys(GENRE_META).map(key=>`<option value="${key}">${GENRE_META[key].label}</option>`).join('');
+  if ([...sel.options].some(o=>o.value===current)) sel.value = current;
+}
 
 function toggleFilterPanel(e){
   if (e) e.stopPropagation();
@@ -611,6 +681,7 @@ function applyFilters(){
   activeFilters.status = document.getElementById('filter-status').value;
   activeFilters.completed = document.getElementById('filter-completed').value;
   activeFilters.rating = document.getElementById('filter-rating').value;
+  activeFilters.genre = document.getElementById('filter-genre').value;
   updateFilterButtonState();
   renderGrid();
 }
@@ -619,15 +690,37 @@ function clearFilters(){
   document.getElementById('filter-status').value = 'all';
   document.getElementById('filter-completed').value = 'all';
   document.getElementById('filter-rating').value = 'all';
+  document.getElementById('filter-genre').value = 'all';
   applyFilters();
 }
 
 function updateFilterButtonState(){
-  const active = activeFilters.status !== 'all' || activeFilters.completed !== 'all' || activeFilters.rating !== 'all';
+  const active = activeFilters.status !== 'all' || activeFilters.completed !== 'all' || activeFilters.rating !== 'all' || activeFilters.genre !== 'all';
   document.getElementById('filterBtn').classList.toggle('btn-primary', active);
 }
 let formRating = 0;
 let formTags = [];
+let formGenres = [];
+
+function renderGenrePicker(){
+  const el = document.getElementById('genrePicker');
+  el.innerHTML = Object.keys(GENRE_META).map(key=>{
+    const g = GENRE_META[key];
+    const active = formGenres.includes(key);
+    return `<span class="genre-chip${active?' active':''}" style="${active?`background:${g.bg};color:${g.text}`:''}" onclick="toggleFormGenre('${key}')">${g.label}</span>`;
+  }).join('');
+}
+
+function toggleFormGenre(key){
+  if (formGenres.includes(key)) formGenres = formGenres.filter(k => k !== key);
+  else formGenres.push(key);
+  renderGenrePicker();
+}
+
+function resetGenrePicker(){
+  formGenres = [];
+  renderGenrePicker();
+}
 
 function renderTagChips(){
   document.getElementById('tagChips').innerHTML = formTags.map(t=>
@@ -661,6 +754,7 @@ function resetTagInput(){
   renderTagChips();
 }
 let editingCategoryKey = null;
+let editingGenreKey = null;
 let editingStatusKey = null;
 
 function renderSidebar(){
@@ -1004,6 +1098,91 @@ function addCategory(){
   populateTypeSelect();
 }
 
+function uniqueGenreKey(base){
+  let key = base, i = 2;
+  while (GENRE_META[key]) { key = `${base}-${i}`; i++; }
+  return key;
+}
+
+function openGenreModal(){
+  editingGenreKey = null;
+  renderGenreModal();
+  document.getElementById('genreModal').classList.add('open');
+}
+
+function closeGenreModal(){
+  document.getElementById('genreModal').classList.remove('open');
+}
+
+function renderGenreModal(){
+  const list = document.getElementById('genreList');
+  list.innerHTML = Object.keys(GENRE_META).map(key=>{
+    const g = GENRE_META[key];
+    if (editingGenreKey === key) {
+      return `<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+        <input type="text" id="edit-genre-label-${key}" value="${g.label}"
+               style="flex:1;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:6px 10px;background:var(--card);color:var(--ink)">
+        <input type="color" id="edit-genre-color-${key}" value="${g.bg}"
+               style="width:34px;height:32px;border:1px solid var(--border);border-radius:8px;padding:2px;background:var(--card)">
+        <button class="btn" onclick="saveEditGenre('${key}')" title="Save"><i class="ti ti-check" aria-hidden="true"></i></button>
+        <button class="btn" onclick="cancelEditGenre()" title="Cancel"><i class="ti ti-x" aria-hidden="true"></i></button>
+      </div>`;
+    }
+    return `<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:11px;font-weight:500;padding:3px 9px;border-radius:10px;background:${g.bg};color:${g.text}">${g.label}</span>
+      <span style="flex:1"></span>
+      <button class="btn" onclick="startEditGenre('${key}')" title="Edit"><i class="ti ti-pencil" aria-hidden="true"></i></button>
+      <button class="btn" onclick="deleteGenre('${key}')" title="Delete"><i class="ti ti-trash" aria-hidden="true"></i></button>
+    </div>`;
+  }).join('');
+}
+
+function startEditGenre(key){
+  editingGenreKey = key;
+  renderGenreModal();
+}
+
+function cancelEditGenre(){
+  editingGenreKey = null;
+  renderGenreModal();
+}
+
+function saveEditGenre(key){
+  const label = document.getElementById(`edit-genre-label-${key}`).value.trim();
+  if (!label) { alert('Please enter a genre name'); return; }
+  const bg = document.getElementById(`edit-genre-color-${key}`).value;
+  GENRE_META[key] = { label, bg, text: contrastText(bg) };
+  editingGenreKey = null;
+  persistGenres();
+  renderGenreModal();
+  renderGrid();
+}
+
+function deleteGenre(key){
+  if (!confirm(`Delete "${GENRE_META[key].label}"? It will be removed from any items using it.`)) return;
+  items.forEach(i => { if (i.genres) i.genres = i.genres.filter(g => g !== key); });
+  delete GENRE_META[key];
+  persistGenres();
+  saveToStorage();
+  renderGenreModal();
+  populateFilterGenreSelect();
+  renderGrid();
+}
+
+function addGenre(){
+  const label = document.getElementById('new-genre-label').value.trim();
+  if (!label) { alert('Please enter a genre name'); return; }
+  const bg = document.getElementById('new-genre-color').value;
+  const key = uniqueGenreKey(slugify(label));
+  GENRE_META[key] = { label, bg, text: contrastText(bg) };
+  persistGenres();
+  document.getElementById('new-genre-label').value = '';
+  document.getElementById('new-genre-color').value = '#84e0d2';
+  renderGenreModal();
+  renderGenrePicker();
+  populateFilterGenreSelect();
+}
+
 function starColor(rating) {
   if (rating >= 5) return 'var(--rating-high)';
   if (rating >= 3) return 'var(--rating-mid)';
@@ -1053,10 +1232,11 @@ function renderGrid() {
     if(activeFilters.completed==='no'&&i.completed) return false;
     if(activeFilters.rating==='unrated'&&i.rating) return false;
     if(activeFilters.rating!=='all'&&activeFilters.rating!=='unrated'&&i.rating!==parseInt(activeFilters.rating)) return false;
+    if(activeFilters.genre!=='all'&&!(i.genres||[]).includes(activeFilters.genre)) return false;
     return true;
   });
 
-  const hasActiveFilters = activeFilters.status!=='all'||activeFilters.completed!=='all'||activeFilters.rating!=='all';
+  const hasActiveFilters = activeFilters.status!=='all'||activeFilters.completed!=='all'||activeFilters.rating!=='all'||activeFilters.genre!=='all';
   const showRecentOnly = activeType==='all' && !q && !hasActiveFilters;
   const displayed = showRecentOnly ? filtered.slice(0, RECENT_LIMIT) : filtered;
 
@@ -1084,6 +1264,7 @@ function renderGrid() {
       <div class="card-body">
         <div class="card-title">${item.title}</div>
         <div class="card-sub">${item.creator}${item.year?' · '+item.year:''}</div>
+        ${(item.genres&&item.genres.length) ? `<div style="margin-bottom:6px">${item.genres.map(k=>{const g=GENRE_META[k];return g?`<span class="mini-tag" style="background:${g.bg};color:${g.text}">${g.label}</span>`:'';}).join('')}</div>` : ''}
         ${(item.tags&&item.tags.length) ? `<div style="margin-bottom:8px">${item.tags.map(t=>`<span class="mini-tag">${t}</span>`).join('')}</div>` : ''}
         <div class="card-meta">
           ${SETTINGS.ratingsEnabled ? (item.rating?starsHtml(item.rating):'<span style="font-size:11px;color:var(--muted-light)">unrated</span>') : '<span></span>'}
@@ -1122,6 +1303,7 @@ function openDetail(id){
           ${item.completed ? `<span class="tag" style="background:var(--teal);color:#fff"><i class="ti ti-check" aria-hidden="true"></i> Completed</span>` : ''}
         </div>
         ${SETTINGS.ratingsEnabled ? (item.rating?`<div class="modal-section">Rating</div><div class="modal-rating">${starsHtml(item.rating,true)}<span style="font-size:14px;color:var(--muted)">${item.rating}/5</span></div>`:'<div style="font-size:13px;color:var(--muted-light);margin-bottom:14px">Not yet rated</div>') : ''}
+        ${(item.genres&&item.genres.length) ? `<div class="modal-section">Genres</div><div style="margin-bottom:14px">${item.genres.map(k=>{const g=GENRE_META[k];return g?`<span class="mini-tag" style="background:${g.bg};color:${g.text}">${g.label}</span>`:'';}).join('')}</div>` : ''}
         ${(item.tags&&item.tags.length) ? `<div class="modal-section">Tags</div><div style="margin-bottom:14px">${item.tags.map(t=>`<span class="mini-tag">${t}</span>`).join('')}</div>` : ''}
         ${item.review?`<div class="modal-section">Review</div><div class="modal-review">"${item.review}"</div>`:''}
       </div>
@@ -1135,8 +1317,8 @@ function openDetail(id){
 }
 
 function closeDetail(){document.getElementById('detailModal').classList.remove('open');}
-function openAdd(){document.getElementById('addModal').classList.add('open');}
-function closeAdd(){document.getElementById('addModal').classList.remove('open');resetPosterUpload();resetStarPicker();resetTagInput();}
+function openAdd(){document.getElementById('addModal').classList.add('open');renderGenrePicker();}
+function closeAdd(){document.getElementById('addModal').classList.remove('open');resetPosterUpload();resetStarPicker();resetTagInput();resetGenrePicker();}
 
 function toggleOtherType(){
   const isOther = document.getElementById('f-type').value === 'other';
@@ -1210,6 +1392,7 @@ function addItem(){
       rating: SETTINGS.ratingsEnabled ? (formRating || null) : null,
       review:document.getElementById('f-review').value.trim(),
       tags: formTags.slice(),
+      genres: formGenres.slice(),
     };
 
     if (isSignedIn) {
@@ -1225,6 +1408,7 @@ function addItem(){
     resetPosterUpload();
     resetStarPicker();
     resetTagInput();
+    resetGenrePicker();
     toggleOtherType();
     closeAdd(); renderStats(); renderGrid();
   }
@@ -1242,11 +1426,13 @@ function addItem(){
 document.getElementById('detailModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeDetail();});
 document.getElementById('addModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeAdd();});
 document.getElementById('categoryModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeCategoryModal();});
+document.getElementById('genreModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeGenreModal();});
 document.getElementById('settingsModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeSettings();});
 document.getElementById('profileModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeProfile();});
 
 populateTypeSelect();
 populateStatusSelect();
+populateFilterGenreSelect();
 applySettings();
 
 function renderTopbarAvatar(avatarUrl){
@@ -1318,7 +1504,7 @@ function recordToItem(rec){
     id: rec.uri.split('/').pop(),
     title: v.title, creator: v.creator, type: v.type, customType: v.customType || '',
     status: v.status, completed: !!v.completed, year: v.year || '',
-    rating: v.rating ?? null, review: v.review || '', tags: v.tags || [],
+    rating: v.rating ?? null, review: v.review || '', tags: v.tags || [], genres: v.genres || [],
     poster: null,
   };
 }

@@ -39,6 +39,10 @@
     .main { flex: 1; min-width: 0; }
     .search-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border); }
     .filter-wrap { position: relative; }
+    .pagination-info { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+    .pagination-info button { background: transparent; border: 1px solid var(--border); border-radius: 6px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink); }
+    .pagination-info button:disabled { opacity: 0.4; cursor: default; }
+    .pagination-info button:not(:disabled):hover { border-color: var(--teal); }
     .filter-panel { position: absolute; top: calc(100% + 6px); right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; width: 200px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 10px; z-index: 5; }
     .search-wrap { position: relative; }
     .grid-heading { padding: 16px 20px 0; font-size: 13px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
@@ -164,8 +168,9 @@
       <div class="search-row">
         <div class="search-wrap">
           <i class="ti ti-search" aria-hidden="true"></i>
-          <input type="text" placeholder="Search..." id="searchInput" oninput="renderGrid()">
+          <input type="text" placeholder="Search..." id="searchInput" oninput="currentPage=1;renderGrid()">
         </div>
+        <div class="pagination-info" id="paginationInfo"></div>
         <div class="filter-wrap">
           <button class="btn" id="filterBtn" onclick="toggleFilterPanel(event)"><i class="ti ti-filter" aria-hidden="true"></i> Filter</button>
           <div class="filter-panel" id="filterPanel" style="display:none">
@@ -624,10 +629,19 @@ async function seedDemoData(){
   }
 }
 
+async function resolveStoredPosters(){
+  const withPosters = items.filter(i => i.posterRef);
+  if (!withPosters.length) return;
+  await Promise.all(withPosters.map(async i => {
+    try { i.poster = await window.atprotoResolvePosterUrl(i.posterRef); }
+    catch (err) { console.warn('Could not load poster for', i.title, err); }
+  }));
+  renderGrid();
+}
+
 window.onAtprotoSignedIn = async function(handle, did){
   isSignedIn = true;
   signedInHandle = handle;
-  document.getElementById('poster-form-group').style.display = 'none';
   applyAuthGate();
   renderSidebar();
   renderTopbarAvatar(getDisplayAvatar(null));
@@ -643,13 +657,16 @@ window.onAtprotoSignedIn = async function(handle, did){
   }
 
   renderStats(); renderGrid();
+  resolveStoredPosters();
+
   if (localItems.length) {
     const publish = confirm(`You have ${localItems.length} item(s) saved on this browser that aren't in your atproto account yet. Publish them now?`);
     if (publish) {
       for (const it of localItems) {
         const { id, poster, ...fields } = it;
+        if (poster) fields.poster = await window.atprotoUploadBlob(poster);
         const rkey = await window.atprotoCreateItem(fields);
-        items.push({ ...it, id: rkey, poster: null });
+        items.push({ ...it, id: rkey, poster, posterRef: fields.poster || null });
       }
       renderStats(); renderGrid();
     }
@@ -660,7 +677,6 @@ window.onAtprotoSignedOut = function(){
   isSignedIn = false;
   signedInHandle = null;
   atprotoProfile = null;
-  document.getElementById('poster-form-group').style.display = 'flex';
   loadFromStorage();
   renderStats(); renderGrid();
   applyAuthGate();
@@ -706,6 +722,7 @@ function applyFilters(){
   activeFilters.rating = document.getElementById('filter-rating').value;
   activeFilters.genre = document.getElementById('filter-genre').value;
   updateFilterButtonState();
+  currentPage = 1;
   renderGrid();
 }
 
@@ -1324,7 +1341,13 @@ function renderStats() {
   bar.style.gridTemplateColumns = `repeat(${2 + (SETTINGS.ratingsEnabled?1:0) + (SETTINGS.categoriesEnabled?1:0)}, 1fr)`;
 }
 
-const RECENT_LIMIT = 8;
+const PAGE_SIZE = 8;
+let currentPage = 1;
+
+function changePage(delta){
+  currentPage += delta;
+  renderGrid();
+}
 
 function renderGrid() {
   const q=document.getElementById('searchInput').value.toLowerCase();
@@ -1340,13 +1363,22 @@ function renderGrid() {
     return true;
   });
 
-  const hasActiveFilters = activeFilters.status!=='all'||activeFilters.completed!=='all'||activeFilters.rating!=='all'||activeFilters.genre!=='all';
-  const showRecentOnly = activeType==='all' && !q && !hasActiveFilters;
-  const displayed = showRecentOnly ? filtered.slice(0, RECENT_LIMIT) : filtered;
+  document.getElementById('gridHeading').style.display = 'none';
 
-  const heading = document.getElementById('gridHeading');
-  heading.textContent = showRecentOnly ? 'Recently added' : '';
-  heading.style.display = showRecentOnly ? 'block' : 'none';
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+  const startIdx = (currentPage - 1) * PAGE_SIZE;
+  const displayed = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+
+  const pag = document.getElementById('paginationInfo');
+  const rangeStart = filtered.length ? startIdx + 1 : 0;
+  const rangeEnd = Math.min(startIdx + PAGE_SIZE, filtered.length);
+  pag.innerHTML = `
+    <span>${rangeStart}-${rangeEnd} of ${filtered.length}</span>
+    <button onclick="changePage(-1)" ${currentPage<=1?'disabled':''} aria-label="Previous page"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
+    <button onclick="changePage(1)" ${currentPage>=totalPages?'disabled':''} aria-label="Next page"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+  `;
 
   const g=document.getElementById('mediaGrid');
   if(!displayed.length){
@@ -1381,6 +1413,7 @@ function renderGrid() {
 
 function filterType(type){
   activeType=type;
+  currentPage=1;
   renderSidebar();
   renderStats();
   renderGrid();
@@ -1532,18 +1565,33 @@ function addItem(){
       genres: formGenres.slice(),
     };
 
+    async function resolvePosterForSignedIn(existingId){
+      if (poster) {
+        return { posterRef: await window.atprotoUploadBlob(poster), previewUrl: poster };
+      }
+      if (existingId !== null) {
+        const existing = items.find(i => String(i.id) === String(existingId));
+        if (existing) return { posterRef: existing.posterRef || null, previewUrl: existing.poster || null };
+      }
+      return { posterRef: null, previewUrl: null };
+    }
+
     if (editingItemId !== null) {
       const idx = items.findIndex(i => String(i.id) === String(editingItemId));
       if (isSignedIn) {
+        const { posterRef, previewUrl } = await resolvePosterForSignedIn(editingItemId);
+        fields.poster = posterRef;
         await window.atprotoUpdateItem(editingItemId, fields);
-        if (idx !== -1) items[idx] = { ...fields, id: editingItemId, poster: null };
+        if (idx !== -1) items[idx] = { ...fields, id: editingItemId, poster: previewUrl, posterRef };
       } else {
         if (idx !== -1) items[idx] = { ...fields, id: editingItemId, poster: poster || items[idx].poster };
         saveToStorage();
       }
     } else if (isSignedIn) {
+      const { posterRef, previewUrl } = await resolvePosterForSignedIn(null);
+      fields.poster = posterRef;
       const id = await window.atprotoCreateItem(fields);
-      items.unshift({ ...fields, id, poster: null });
+      items.unshift({ ...fields, id, poster: previewUrl, posterRef });
     } else {
       items.unshift({ ...fields, id: nextId++, poster });
       saveToStorage();
@@ -1651,7 +1699,7 @@ function recordToItem(rec){
     title: v.title, creator: v.creator, type: v.type, customType: v.customType || '',
     status: v.status, completed: !!v.completed, year: v.year || '',
     rating: v.rating ?? null, review: v.review || '', tags: v.tags || [], genres: v.genres || [],
-    poster: null,
+    poster: null, posterRef: v.poster || null,
   };
 }
 
@@ -1669,8 +1717,7 @@ window.atprotoListItems = async function(){
 };
 
 window.atprotoCreateItem = async function(fields){
-  const record = { '$type': ITEM_COLLECTION, ...fields, poster: undefined, createdAt: new Date().toISOString() };
-  delete record.poster;
+  const record = { '$type': ITEM_COLLECTION, ...fields, createdAt: new Date().toISOString() };
   const res = await currentAgent.com.atproto.repo.createRecord({
     repo: currentDid, collection: ITEM_COLLECTION, record,
   });
@@ -1678,11 +1725,32 @@ window.atprotoCreateItem = async function(fields){
 };
 
 window.atprotoUpdateItem = async function(rkey, fields){
-  const record = { '$type': ITEM_COLLECTION, ...fields, poster: undefined, updatedAt: new Date().toISOString() };
-  delete record.poster;
+  const record = { '$type': ITEM_COLLECTION, ...fields, updatedAt: new Date().toISOString() };
   await currentAgent.com.atproto.repo.putRecord({
     repo: currentDid, collection: ITEM_COLLECTION, rkey, record,
   });
+};
+
+function dataUrlToBytes(dataUrl){
+  const [header, base64] = dataUrl.split(',');
+  const mime = header.match(/data:(.*?);base64/)[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return { bytes, mime };
+}
+
+window.atprotoUploadBlob = async function(dataUrl){
+  const { bytes, mime } = dataUrlToBytes(dataUrl);
+  const res = await currentAgent.com.atproto.repo.uploadBlob(bytes, { encoding: mime });
+  return res.data.blob;
+};
+
+window.atprotoResolvePosterUrl = async function(posterRef){
+  if (!posterRef || !posterRef.ref || !posterRef.ref.$link) return null;
+  const res = await currentAgent.com.atproto.sync.getBlob({ did: currentDid, cid: posterRef.ref.$link });
+  const blob = new Blob([res.data], { type: posterRef.mimeType || 'image/jpeg' });
+  return URL.createObjectURL(blob);
 };
 
 window.atprotoDeleteItem = async function(rkey){

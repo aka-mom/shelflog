@@ -12,12 +12,12 @@
       --pastel-orange: #f7b4a4; --golden: #f3c623; --green-brown: #5e6b0e;
       --cherrywood: #431225; --surface: #ffffff; --card: #f4f8df; --border: #e1ecb6;
       --ink: #1f3a14; --muted: #5d7a4a; --muted-light: #93ad7f;
-      --rating-low: #e2533d; --rating-mid: #f0a202; --rating-high: var(--golden);
+      --rating-low: #e2533d; --rating-mid: #f0a202; --rating-high: #f3c623;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--dark); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
-    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 8; background: var(--dark); }
     .logo { font-size: 17px; font-weight: 500; color: var(--lime); display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
     .logo-icon { width: 28px; height: 28px; background: var(--lime); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
     .logo-icon svg { width: 18px; height: 18px; }
@@ -30,7 +30,7 @@
     .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
     .stat-val { font-size: 22px; font-weight: 500; color: var(--lime); }
     .layout { display: flex; align-items: flex-start; }
-    .sidebar { width: 180px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 16px 12px; min-height: calc(100vh - 65px); }
+    .sidebar { width: 180px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 16px 12px; min-height: calc(100vh - 65px); position: sticky; top: 65px; height: calc(100vh - 65px); overflow-y: auto; }
     .side-nav { display: flex; flex-direction: column; gap: 3px; }
     .side-link { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border: none; border-radius: 8px; font-size: 13px; background: transparent; color: var(--muted); cursor: pointer; font-family: inherit; text-align: left; width: 100%; }
     .side-link .ti { font-size: 16px; }
@@ -278,12 +278,12 @@
 
       <div>
         <div class="modal-section">Categories</div>
-        <button class="btn" onclick="openCategoryModal()"><i class="ti ti-tags" aria-hidden="true"></i> Manage categories</button>
+        <button class="btn" onclick="closeSettings();openCategoryModal()"><i class="ti ti-tags" aria-hidden="true"></i> Manage categories</button>
       </div>
 
       <div>
         <div class="modal-section">Genres</div>
-        <button class="btn" onclick="openGenreModal()"><i class="ti ti-movie" aria-hidden="true"></i> Manage genres</button>
+        <button class="btn" onclick="closeSettings();openGenreModal()"><i class="ti ti-movie" aria-hidden="true"></i> Manage genres</button>
       </div>
 
       <div>
@@ -553,9 +553,6 @@ function applyTheme(key){
   root.setProperty('--lime', t.lime);
   root.setProperty('--teal', t.teal);
   root.setProperty('--golden', t.golden);
-  root.setProperty('--rating-low', t.ratingLow);
-  root.setProperty('--rating-mid', t.ratingMid);
-  root.setProperty('--rating-high', t.golden);
 }
 
 function persistSettings(){
@@ -1425,12 +1422,28 @@ function openDetail(id){
 }
 
 function closeDetail(){document.getElementById('detailModal').classList.remove('open');}
+function resetAddForm(){
+  document.getElementById('f-title').value = '';
+  document.getElementById('f-creator').value = '';
+  document.getElementById('f-type').selectedIndex = 0;
+  document.getElementById('f-status').selectedIndex = 0;
+  document.getElementById('f-completed').checked = false;
+  document.getElementById('f-year').value = '';
+  document.getElementById('f-review').value = '';
+  document.getElementById('f-other-type').value = '';
+  toggleOtherType();
+  resetPosterUpload();
+  resetStarPicker();
+  resetTagInput();
+  resetGenrePicker();
+}
+
 function openAdd(){
   editingItemId = null;
   document.getElementById('addModalTitle').textContent = 'Add new item';
   document.getElementById('addSubmitBtn').textContent = 'Add to log';
+  resetAddForm();
   document.getElementById('addModal').classList.add('open');
-  renderGenrePicker();
 }
 function closeAdd(){
   document.getElementById('addModal').classList.remove('open');

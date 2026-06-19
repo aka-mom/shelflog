@@ -42,7 +42,7 @@
     .filter-panel { position: absolute; top: calc(100% + 6px); right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; width: 200px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 10px; z-index: 5; }
     .search-wrap { position: relative; }
     .grid-heading { padding: 16px 20px 0; font-size: 13px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-    .search-wrap input { padding: 5px 12px 5px 32px; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); font-family: inherit; width: 180px; }
+    .search-wrap input { padding: 5px 12px 5px 32px; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); font-family: inherit; width: 320px; }
     .search-wrap input::placeholder { color: var(--muted-light); }
     .search-wrap .ti { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); font-size: 15px; color: var(--muted-light); }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; padding: 18px 20px; }
@@ -702,13 +702,53 @@ let formRating = 0;
 let formTags = [];
 let formGenres = [];
 
+let addingGenreInline = false;
+
 function renderGenrePicker(){
   const el = document.getElementById('genrePicker');
-  el.innerHTML = Object.keys(GENRE_META).map(key=>{
+  let html = Object.keys(GENRE_META).map(key=>{
     const g = GENRE_META[key];
     const active = formGenres.includes(key);
     return `<span class="genre-chip${active?' active':''}" style="${active?`background:${g.bg};color:${g.text}`:''}" onclick="toggleFormGenre('${key}')">${g.label}</span>`;
   }).join('');
+
+  if (addingGenreInline) {
+    html += `<span style="display:inline-flex;align-items:center;gap:4px">
+      <input type="text" id="inline-genre-label" placeholder="New genre" onkeydown="if(event.key==='Enter')confirmInlineGenre()"
+             style="width:110px;font-size:12px;border:1px solid var(--border);border-radius:10px;padding:4px 8px;background:var(--card);color:var(--ink)">
+      <input type="color" id="inline-genre-color" value="#84e0d2" style="width:26px;height:26px;border:1px solid var(--border);border-radius:8px;padding:1px;background:var(--card)">
+      <i class="ti ti-check" style="cursor:pointer;color:var(--teal)" onclick="confirmInlineGenre()" aria-hidden="true"></i>
+      <i class="ti ti-x" style="cursor:pointer;color:var(--muted)" onclick="cancelInlineGenre()" aria-hidden="true"></i>
+    </span>`;
+  } else {
+    html += `<span class="genre-chip" onclick="startInlineGenre()"><i class="ti ti-plus" aria-hidden="true"></i> Add genre</span>`;
+  }
+
+  el.innerHTML = html;
+  if (addingGenreInline) document.getElementById('inline-genre-label').focus();
+}
+
+function startInlineGenre(){
+  addingGenreInline = true;
+  renderGenrePicker();
+}
+
+function cancelInlineGenre(){
+  addingGenreInline = false;
+  renderGenrePicker();
+}
+
+function confirmInlineGenre(){
+  const label = document.getElementById('inline-genre-label').value.trim();
+  if (!label) { cancelInlineGenre(); return; }
+  const bg = document.getElementById('inline-genre-color').value;
+  const key = uniqueGenreKey(slugify(label));
+  GENRE_META[key] = { label, bg, text: contrastText(bg) };
+  persistGenres();
+  formGenres.push(key);
+  addingGenreInline = false;
+  populateFilterGenreSelect();
+  renderGenrePicker();
 }
 
 function toggleFormGenre(key){
@@ -719,6 +759,7 @@ function toggleFormGenre(key){
 
 function resetGenrePicker(){
   formGenres = [];
+  addingGenreInline = false;
   renderGenrePicker();
 }
 

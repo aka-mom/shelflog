@@ -366,7 +366,7 @@
 <div class="modal-bg" id="addModal">
   <div class="modal">
     <div class="modal-header">
-      <span style="font-weight:500;font-size:15px;color:var(--ink)">Add new item</span>
+      <span style="font-weight:500;font-size:15px;color:var(--ink)" id="addModalTitle">Add new item</span>
       <button class="btn" onclick="closeAdd()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
     </div>
     <div class="add-form">
@@ -436,7 +436,7 @@
       <div class="form-group"><label class="form-label" id="label-review">Review / notes</label><textarea id="f-review" placeholder="What did you think?"></textarea></div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
         <button class="btn" onclick="closeAdd()">Cancel</button>
-        <button class="btn btn-primary" onclick="addItem()">Add to log</button>
+        <button class="btn btn-primary" id="addSubmitBtn" onclick="addItem()">Add to log</button>
       </div>
     </div>
   </div>
@@ -699,6 +699,46 @@ function updateFilterButtonState(){
   document.getElementById('filterBtn').classList.toggle('btn-primary', active);
 }
 let formRating = 0;
+let editingItemId = null;
+
+function openEditItem(id){
+  const item = items.find(i => String(i.id) === String(id));
+  if (!item) return;
+  closeDetail();
+
+  editingItemId = id;
+  document.getElementById('addModalTitle').textContent = 'Edit item';
+  document.getElementById('addSubmitBtn').textContent = 'Save changes';
+
+  document.getElementById('f-title').value = item.title;
+  document.getElementById('f-creator').value = item.creator;
+  document.getElementById('f-type').value = item.type;
+  document.getElementById('f-status').value = item.status;
+  document.getElementById('f-completed').checked = !!item.completed;
+  document.getElementById('f-year').value = item.year || '';
+  document.getElementById('f-review').value = item.review || '';
+  document.getElementById('f-other-type').value = item.customType || '';
+  toggleOtherType();
+
+  formRating = item.rating || 0;
+  formTags = (item.tags || []).slice();
+  formGenres = (item.genres || []).slice();
+  addingGenreInline = false;
+
+  if (item.poster) {
+    document.getElementById('poster-preview').src = item.poster;
+    document.getElementById('poster-preview').style.display = 'block';
+    document.getElementById('poster-placeholder').style.display = 'none';
+  } else {
+    resetPosterUpload();
+  }
+
+  renderStarPicker(formRating);
+  renderTagChips();
+  renderGenrePicker();
+
+  document.getElementById('addModal').classList.add('open');
+}
 let formTags = [];
 let formGenres = [];
 
@@ -1351,6 +1391,7 @@ function openDetail(id){
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="deleteItem('${item.id}')"><i class="ti ti-trash" aria-hidden="true"></i> Remove</button>
+      <button class="btn" onclick="openEditItem('${item.id}')"><i class="ti ti-pencil" aria-hidden="true"></i> Edit</button>
       <button class="btn btn-primary" onclick="closeDetail()">Done</button>
     </div>
   `;
@@ -1358,8 +1399,20 @@ function openDetail(id){
 }
 
 function closeDetail(){document.getElementById('detailModal').classList.remove('open');}
-function openAdd(){document.getElementById('addModal').classList.add('open');renderGenrePicker();}
-function closeAdd(){document.getElementById('addModal').classList.remove('open');resetPosterUpload();resetStarPicker();resetTagInput();resetGenrePicker();}
+function openAdd(){
+  editingItemId = null;
+  document.getElementById('addModalTitle').textContent = 'Add new item';
+  document.getElementById('addSubmitBtn').textContent = 'Add to log';
+  document.getElementById('addModal').classList.add('open');
+  renderGenrePicker();
+}
+function closeAdd(){
+  document.getElementById('addModal').classList.remove('open');
+  resetPosterUpload(); resetStarPicker(); resetTagInput(); resetGenrePicker();
+  editingItemId = null;
+  document.getElementById('addModalTitle').textContent = 'Add new item';
+  document.getElementById('addSubmitBtn').textContent = 'Add to log';
+}
 
 function toggleOtherType(){
   const isOther = document.getElementById('f-type').value === 'other';
@@ -1436,7 +1489,16 @@ function addItem(){
       genres: formGenres.slice(),
     };
 
-    if (isSignedIn) {
+    if (editingItemId !== null) {
+      const idx = items.findIndex(i => String(i.id) === String(editingItemId));
+      if (isSignedIn) {
+        await window.atprotoUpdateItem(editingItemId, fields);
+        if (idx !== -1) items[idx] = { ...fields, id: editingItemId, poster: null };
+      } else {
+        if (idx !== -1) items[idx] = { ...fields, id: editingItemId, poster: poster || items[idx].poster };
+        saveToStorage();
+      }
+    } else if (isSignedIn) {
       const id = await window.atprotoCreateItem(fields);
       items.unshift({ ...fields, id, poster: null });
     } else {
@@ -1570,6 +1632,14 @@ window.atprotoCreateItem = async function(fields){
     repo: currentDid, collection: ITEM_COLLECTION, record,
   });
   return res.data.uri.split('/').pop();
+};
+
+window.atprotoUpdateItem = async function(rkey, fields){
+  const record = { '$type': ITEM_COLLECTION, ...fields, poster: undefined, updatedAt: new Date().toISOString() };
+  delete record.poster;
+  await currentAgent.com.atproto.repo.putRecord({
+    repo: currentDid, collection: ITEM_COLLECTION, rkey, record,
+  });
 };
 
 window.atprotoDeleteItem = async function(rkey){

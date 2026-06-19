@@ -94,6 +94,14 @@
     .tag-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 10px; background: var(--lime); color: var(--dark); }
     .tag-chip .ti { font-size: 12px; cursor: pointer; }
     .mini-tag { display: inline-flex; font-size: 10px; padding: 2px 7px; border-radius: 8px; background: var(--border); color: var(--muted); margin-right: 4px; }
+    .theme-preview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .theme-preview { border: 2px solid var(--border); border-radius: 10px; padding: 8px; cursor: pointer; text-align: center; }
+    .theme-preview:hover { border-color: var(--muted-light); }
+    .theme-preview.active { border-color: var(--teal); }
+    .theme-swatch { height: 44px; border-radius: 6px; margin-bottom: 6px; position: relative; overflow: hidden; }
+    .theme-swatch .mini-card { position: absolute; bottom: 4px; left: 4px; right: 4px; height: 20px; border-radius: 4px; }
+    .theme-swatch .mini-dot { position: absolute; top: 4px; right: 4px; width: 10px; height: 10px; border-radius: 50%; }
+    .theme-preview-label { font-size: 11px; color: var(--ink); }
     #authGate { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
     #topbarAvatarBtn img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; display: block; }
   </style>
@@ -201,12 +209,8 @@
 
       <div>
         <div class="modal-section">Appearance</div>
-        <select id="setting-theme">
-          <option value="puppy">Puppy</option>
-          <option value="nature">Nature</option>
-          <option value="space">Space</option>
-          <option value="orangesicle">Orangesicle</option>
-        </select>
+        <input type="hidden" id="setting-theme">
+        <div class="theme-preview-grid" id="themePreviewGrid"></div>
       </div>
 
       <div>
@@ -699,8 +703,29 @@ function closeProfile(){
   document.getElementById('profileModal').classList.remove('open');
 }
 
+function renderThemePreviews(){
+  const el = document.getElementById('themePreviewGrid');
+  const selected = document.getElementById('setting-theme').value;
+  el.innerHTML = Object.keys(THEMES).map(key=>{
+    const t = THEMES[key];
+    return `<div class="theme-preview${selected===key?' active':''}" data-theme="${key}" onclick="selectThemePreview('${key}')">
+      <div class="theme-swatch" style="background:${t.dark}">
+        <div class="mini-card" style="background:${t.card};border:1px solid ${t.border}"></div>
+        <div class="mini-dot" style="background:${t.lime}"></div>
+      </div>
+      <div class="theme-preview-label">${t.label}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectThemePreview(key){
+  document.getElementById('setting-theme').value = key;
+  document.querySelectorAll('.theme-preview').forEach(el=>el.classList.toggle('active', el.dataset.theme===key));
+}
+
 function openSettings(){
   document.getElementById('setting-theme').value = SETTINGS.theme;
+  renderThemePreviews();
   document.getElementById('setting-ratings').checked = SETTINGS.ratingsEnabled;
   document.getElementById('setting-categories').checked = SETTINGS.categoriesEnabled;
   document.getElementById('setting-label-title').value = SETTINGS.fieldLabels.title;

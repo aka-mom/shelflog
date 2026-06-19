@@ -37,7 +37,9 @@
     .side-link:hover { background: var(--card); color: var(--ink); }
     .side-link.active { background: var(--lime); color: var(--dark); font-weight: 500; }
     .main { flex: 1; min-width: 0; }
-    .search-row { display: flex; justify-content: flex-end; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+    .search-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+    .filter-wrap { position: relative; }
+    .filter-panel { position: absolute; top: calc(100% + 6px); right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; width: 200px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 10px; z-index: 5; }
     .search-wrap { position: relative; }
     .grid-heading { padding: 16px 20px 0; font-size: 13px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .search-wrap input { padding: 5px 12px 5px 32px; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); font-family: inherit; width: 180px; }
@@ -160,6 +162,38 @@
         <div class="search-wrap">
           <i class="ti ti-search" aria-hidden="true"></i>
           <input type="text" placeholder="Search..." id="searchInput" oninput="renderGrid()">
+        </div>
+        <div class="filter-wrap">
+          <button class="btn" id="filterBtn" onclick="toggleFilterPanel(event)"><i class="ti ti-filter" aria-hidden="true"></i> Filter</button>
+          <div class="filter-panel" id="filterPanel" style="display:none">
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select id="filter-status" onchange="applyFilters()">
+                <option value="all">All</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Completed</label>
+              <select id="filter-completed" onchange="applyFilters()">
+                <option value="all">All</option>
+                <option value="yes">Completed</option>
+                <option value="no">Not completed</option>
+              </select>
+            </div>
+            <div class="form-group" id="filter-rating-group">
+              <label class="form-label">Rating</label>
+              <select id="filter-rating" onchange="applyFilters()">
+                <option value="all">All</option>
+                <option value="5">5 stars</option>
+                <option value="4">4 stars</option>
+                <option value="3">3 stars</option>
+                <option value="2">2 stars</option>
+                <option value="1">1 star</option>
+                <option value="unrated">Unrated</option>
+              </select>
+            </div>
+            <button class="btn" onclick="clearFilters()" style="width:100%;justify-content:center">Clear filters</button>
+          </div>
         </div>
       </div>
 
@@ -550,6 +584,48 @@ window.onAtprotoSignedOut = function(){
 
 
 let activeType = 'all';
+let activeFilters = { status: 'all', completed: 'all', rating: 'all' };
+
+function toggleFilterPanel(e){
+  if (e) e.stopPropagation();
+  const panel = document.getElementById('filterPanel');
+  panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+}
+
+document.addEventListener('click', e=>{
+  const panel = document.getElementById('filterPanel');
+  const wrap = document.querySelector('.filter-wrap');
+  if (panel.style.display !== 'none' && wrap && !wrap.contains(e.target)) {
+    panel.style.display = 'none';
+  }
+});
+
+function populateFilterStatusSelect(){
+  const sel = document.getElementById('filter-status');
+  const current = sel.value;
+  sel.innerHTML = '<option value="all">All</option>' + Object.keys(STATUS_META).map(key=>`<option value="${key}">${STATUS_META[key].label}</option>`).join('');
+  if ([...sel.options].some(o=>o.value===current)) sel.value = current;
+}
+
+function applyFilters(){
+  activeFilters.status = document.getElementById('filter-status').value;
+  activeFilters.completed = document.getElementById('filter-completed').value;
+  activeFilters.rating = document.getElementById('filter-rating').value;
+  updateFilterButtonState();
+  renderGrid();
+}
+
+function clearFilters(){
+  document.getElementById('filter-status').value = 'all';
+  document.getElementById('filter-completed').value = 'all';
+  document.getElementById('filter-rating').value = 'all';
+  applyFilters();
+}
+
+function updateFilterButtonState(){
+  const active = activeFilters.status !== 'all' || activeFilters.completed !== 'all' || activeFilters.rating !== 'all';
+  document.getElementById('filterBtn').classList.toggle('btn-primary', active);
+}
 let formRating = 0;
 let formTags = [];
 
@@ -609,6 +685,7 @@ function populateStatusSelect(){
   const current = sel.value;
   sel.innerHTML = Object.keys(STATUS_META).map(key=>`<option value="${key}">${STATUS_META[key].label}</option>`).join('');
   if (STATUS_META[current]) sel.value = current;
+  populateFilterStatusSelect();
 }
 
 function renderStatusList(){
@@ -817,6 +894,11 @@ function applySettings(){
   document.getElementById('label-review').textContent = SETTINGS.fieldLabels.review;
 
   document.getElementById('rating-form-group').style.display = SETTINGS.ratingsEnabled ? 'flex' : 'none';
+  document.getElementById('filter-rating-group').style.display = SETTINGS.ratingsEnabled ? 'flex' : 'none';
+  if (!SETTINGS.ratingsEnabled) {
+    document.getElementById('filter-rating').value = 'all';
+    activeFilters.rating = 'all';
+  }
   document.getElementById('sidebar').style.display = SETTINGS.categoriesEnabled ? 'flex' : 'none';
   document.getElementById('type-form-group').style.display = SETTINGS.categoriesEnabled ? 'flex' : 'none';
 
@@ -966,10 +1048,16 @@ function renderGrid() {
   const filtered=items.filter(i=>{
     if(activeType!=='all'&&i.type!==activeType) return false;
     if(q&&!i.title.toLowerCase().includes(q)&&!i.creator.toLowerCase().includes(q)&&!(i.tags||[]).some(t=>t.toLowerCase().includes(q))) return false;
+    if(activeFilters.status!=='all'&&i.status!==activeFilters.status) return false;
+    if(activeFilters.completed==='yes'&&!i.completed) return false;
+    if(activeFilters.completed==='no'&&i.completed) return false;
+    if(activeFilters.rating==='unrated'&&i.rating) return false;
+    if(activeFilters.rating!=='all'&&activeFilters.rating!=='unrated'&&i.rating!==parseInt(activeFilters.rating)) return false;
     return true;
   });
 
-  const showRecentOnly = activeType==='all' && !q;
+  const hasActiveFilters = activeFilters.status!=='all'||activeFilters.completed!=='all'||activeFilters.rating!=='all';
+  const showRecentOnly = activeType==='all' && !q && !hasActiveFilters;
   const displayed = showRecentOnly ? filtered.slice(0, RECENT_LIMIT) : filtered;
 
   const heading = document.getElementById('gridHeading');

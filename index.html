@@ -1425,7 +1425,11 @@ function closeDetail(){document.getElementById('detailModal').classList.remove('
 function resetAddForm(){
   document.getElementById('f-title').value = '';
   document.getElementById('f-creator').value = '';
-  document.getElementById('f-type').selectedIndex = 0;
+  if (activeType !== 'all' && TYPE_META[activeType]) {
+    document.getElementById('f-type').value = activeType;
+  } else {
+    document.getElementById('f-type').selectedIndex = 0;
+  }
   document.getElementById('f-status').selectedIndex = 0;
   document.getElementById('f-completed').checked = false;
   document.getElementById('f-year').value = '';

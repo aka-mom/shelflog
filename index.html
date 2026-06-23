@@ -646,6 +646,16 @@ const DEMO_ITEMS = [
   { title:'Worst Vacation Ever', creator:'Unknown', type:'book', customType:'', status:'physical', completed:false, year:'2023', rating:1, review:'Could not finish.', tags:[], genres:[] },
 ];
 
+function hasSeededDemo(did){
+  try { return localStorage.getItem(`shelflog-demo-seeded-${did}`) === 'true'; }
+  catch (e) { return false; }
+}
+
+function markDemoSeeded(did){
+  try { localStorage.setItem(`shelflog-demo-seeded-${did}`, 'true'); }
+  catch (e) { /* ignore */ }
+}
+
 async function seedDemoData(){
   for (const demo of DEMO_ITEMS) {
     const id = await window.atprotoCreateItem(demo);
@@ -687,8 +697,9 @@ window.onAtprotoSignedIn = async function(handle, did){
 
   items = await window.atprotoListItems();
 
-  if (items.length === 0) {
+  if (items.length === 0 && !hasSeededDemo(did)) {
     await seedDemoData();
+    markDemoSeeded(did);
   }
 
   renderStats(); renderGrid();

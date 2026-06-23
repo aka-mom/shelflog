@@ -448,7 +448,7 @@
 </div>
 
 <script>
-let TYPE_META = {
+const DEFAULT_TYPE_META = {
   movie:   { icon:'🎬', label:'Movie',   bg:'#00b887', text:'#010807' },
   tv:      { icon:'📺', label:'TV',      bg:'#6568ef', text:'#fff'    },
   book:    { icon:'📖', label:'Book',    bg:'#d2f63b', text:'#010807' },
@@ -458,6 +458,7 @@ let TYPE_META = {
   game:    { icon:'🎮', label:'Game',    bg:'#9f5722', text:'#fff'    },
   other:   { icon:'📦', label:'Other',   bg:'#e1ecb6', text:'#5d7a4a' },
 };
+let TYPE_META = structuredClone(DEFAULT_TYPE_META);
 
 function contrastText(hex){
   const c = hex.replace('#','');
@@ -467,40 +468,44 @@ function contrastText(hex){
 }
 
 function persistCategories(){
-  localStorage.setItem('shelflog-types', JSON.stringify(TYPE_META));
+  if (!currentSignedInDid) return;
+  localStorage.setItem(`shelflog-types-${currentSignedInDid}`, JSON.stringify(TYPE_META));
 }
 
-function loadTypesFromStorage(){
+function loadTypesForAccount(did){
+  TYPE_META = structuredClone(DEFAULT_TYPE_META);
   try {
-    const saved = localStorage.getItem('shelflog-types');
+    const saved = localStorage.getItem(`shelflog-types-${did}`);
     if (saved) TYPE_META = JSON.parse(saved);
   } catch (e) {
     console.warn('Could not load saved categories:', e);
   }
 }
-loadTypesFromStorage();
-let STATUS_META = {
+
+const DEFAULT_STATUS_META = {
   physical: { label:'Physical', bg:'#e6f4b8', text:'#5e6b0e' },
   digital:  { label:'Digital',  bg:'#d6f0e2', text:'#00795c' },
   rented:   { label:'Rented',   bg:'#fdf0c4', text:'#a17a00' },
   other:    { label:'Unspecified', bg:'#e1ecb6', text:'#5d7a4a' },
 };
+let STATUS_META = structuredClone(DEFAULT_STATUS_META);
 
 function persistStatuses(){
-  localStorage.setItem('shelflog-statuses', JSON.stringify(STATUS_META));
+  if (!currentSignedInDid) return;
+  localStorage.setItem(`shelflog-statuses-${currentSignedInDid}`, JSON.stringify(STATUS_META));
 }
 
-function loadStatusesFromStorage(){
+function loadStatusesForAccount(did){
+  STATUS_META = structuredClone(DEFAULT_STATUS_META);
   try {
-    const saved = localStorage.getItem('shelflog-statuses');
+    const saved = localStorage.getItem(`shelflog-statuses-${did}`);
     if (saved) STATUS_META = JSON.parse(saved);
   } catch (e) {
     console.warn('Could not load saved statuses:', e);
   }
 }
-loadStatusesFromStorage();
 
-let GENRE_META = {
+const DEFAULT_GENRE_META = {
   action:      { label:'Action', bg:'#f7b4a4', text:'#431225' },
   comedy:      { label:'Comedy', bg:'#f3c623', text:'#5c4a00' },
   drama:       { label:'Drama', bg:'#84e0d2', text:'#0f4a40' },
@@ -510,22 +515,24 @@ let GENRE_META = {
   thriller:    { label:'Thriller', bg:'#9f5722', text:'#ffffff' },
   documentary: { label:'Documentary', bg:'#00b887', text:'#010807' },
 };
+let GENRE_META = structuredClone(DEFAULT_GENRE_META);
 
 function persistGenres(){
-  localStorage.setItem('shelflog-genres', JSON.stringify(GENRE_META));
+  if (!currentSignedInDid) return;
+  localStorage.setItem(`shelflog-genres-${currentSignedInDid}`, JSON.stringify(GENRE_META));
 }
 
-function loadGenresFromStorage(){
+function loadGenresForAccount(did){
+  GENRE_META = structuredClone(DEFAULT_GENRE_META);
   try {
-    const saved = localStorage.getItem('shelflog-genres');
+    const saved = localStorage.getItem(`shelflog-genres-${did}`);
     if (saved) GENRE_META = JSON.parse(saved);
   } catch (e) {
     console.warn('Could not load saved genres:', e);
   }
 }
-loadGenresFromStorage();
 
-let SETTINGS = {
+const DEFAULT_SETTINGS = {
   ratingsEnabled: true,
   categoriesEnabled: true,
   appName: 'shelflog',
@@ -533,6 +540,7 @@ let SETTINGS = {
   fieldLabels: { title:'Title', creator:'Creator', year:'Year', review:'Review / notes' },
   theme: 'nature',
 };
+let SETTINGS = structuredClone(DEFAULT_SETTINGS);
 
 const THEMES = {
   puppy:           { label:'Puppy', dark:'#fff5f7', surface:'#ffffff', card:'#fde6ec', border:'#f7c9d6', ink:'#5c2a3a', muted:'#a3677a', mutedLight:'#c79aab', lime:'#f4a6c1', teal:'#e8839f', golden:'#f7b4a4', ratingLow:'#e08a9a', ratingMid:'#f0b8a0' },
@@ -561,33 +569,17 @@ function applyTheme(key){
 }
 
 function persistSettings(){
-  localStorage.setItem('shelflog-settings', JSON.stringify(SETTINGS));
+  if (!currentSignedInDid) return;
+  localStorage.setItem(`shelflog-settings-${currentSignedInDid}`, JSON.stringify(SETTINGS));
 }
 
-function loadSettingsFromStorage(){
+function loadSettingsForAccount(did){
+  SETTINGS = structuredClone(DEFAULT_SETTINGS);
   try {
-    const saved = localStorage.getItem('shelflog-settings');
+    const saved = localStorage.getItem(`shelflog-settings-${did}`);
     if (saved) SETTINGS = Object.assign(SETTINGS, JSON.parse(saved));
   } catch (e) {
     console.warn('Could not load saved settings:', e);
-  }
-}
-loadSettingsFromStorage();
-
-function saveToStorage() {
-  localStorage.setItem('shelflog-items', JSON.stringify(items));
-  localStorage.setItem('shelflog-nextId', String(nextId));
-}
-
-function loadFromStorage() {
-  items = [];
-  try {
-    const stored = localStorage.getItem('shelflog-items');
-    const storedId = localStorage.getItem('shelflog-nextId');
-    if (stored) items = JSON.parse(stored);
-    if (storedId) nextId = parseInt(storedId);
-  } catch (e) {
-    console.warn('Could not load saved data:', e);
   }
 }
 
@@ -595,18 +587,45 @@ let items = [];
 let nextId = 1;
 let isSignedIn = false;
 let signedInHandle = null;
+let currentSignedInDid = null;
 let atprotoProfile = null;
 let customAvatar = null;
 
-function loadAvatarFromStorage(){
-  try { customAvatar = localStorage.getItem('shelflog-avatar'); } catch (e) { /* ignore */ }
+function persistAvatar(){
+  if (!currentSignedInDid) return;
+  try {
+    if (customAvatar) localStorage.setItem(`shelflog-avatar-${currentSignedInDid}`, customAvatar);
+    else localStorage.removeItem(`shelflog-avatar-${currentSignedInDid}`);
+  } catch (e) { /* ignore */ }
 }
-loadAvatarFromStorage();
+
+function loadAvatarForAccount(did){
+  customAvatar = null;
+  try { customAvatar = localStorage.getItem(`shelflog-avatar-${did}`); } catch (e) { /* ignore */ }
+}
 
 function getDisplayAvatar(atprotoAvatarUrl){
   return customAvatar || atprotoAvatarUrl || null;
 }
-loadFromStorage();
+
+function saveToStorage() {
+  if (!currentSignedInDid) return;
+  localStorage.setItem(`shelflog-items-${currentSignedInDid}`, JSON.stringify(items));
+  localStorage.setItem(`shelflog-nextId-${currentSignedInDid}`, String(nextId));
+}
+
+function loadFromStorage() {
+  items = [];
+  if (!currentSignedInDid) return;
+  try {
+    const stored = localStorage.getItem(`shelflog-items-${currentSignedInDid}`);
+    const storedId = localStorage.getItem(`shelflog-nextId-${currentSignedInDid}`);
+    if (stored) items = JSON.parse(stored);
+    if (storedId) nextId = parseInt(storedId);
+  } catch (e) {
+    console.warn('Could not load saved data:', e);
+  }
+}
 
 const DEMO_ITEMS = [
   { title:'The Matrix', creator:'Wachowski Sisters', type:'movie', customType:'', status:'digital', completed:true, year:'1999', rating:5, review:"Redefined what sci-fi action could look like.", tags:['cyberpunk','classic'], genres:['action','sci-fi'] },
@@ -642,42 +661,52 @@ async function resolveStoredPosters(){
 window.onAtprotoSignedIn = async function(handle, did){
   isSignedIn = true;
   signedInHandle = handle;
+  currentSignedInDid = did;
+
+  loadTypesForAccount(did);
+  loadStatusesForAccount(did);
+  loadGenresForAccount(did);
+  loadSettingsForAccount(did);
+  loadAvatarForAccount(did);
+
+  populateTypeSelect();
+  populateStatusSelect();
+  populateFilterGenreSelect();
+  applySettings();
+
   applyAuthGate();
-  renderSidebar();
   renderTopbarAvatar(getDisplayAvatar(null));
 
   atprotoProfile = await window.atprotoGetProfile();
   renderTopbarAvatar(getDisplayAvatar(atprotoProfile && atprotoProfile.avatar));
 
-  const localItems = items;
   items = await window.atprotoListItems();
 
-  if (items.length === 0 && localItems.length === 0) {
+  if (items.length === 0) {
     await seedDemoData();
   }
 
   renderStats(); renderGrid();
   resolveStoredPosters();
-
-  if (localItems.length) {
-    const publish = confirm(`You have ${localItems.length} item(s) saved on this browser that aren't in your atproto account yet. Publish them now?`);
-    if (publish) {
-      for (const it of localItems) {
-        const { id, poster, ...fields } = it;
-        if (poster) fields.poster = await window.atprotoUploadBlob(poster);
-        const rkey = await window.atprotoCreateItem(fields);
-        items.push({ ...it, id: rkey, poster, posterRef: fields.poster || null });
-      }
-      renderStats(); renderGrid();
-    }
-  }
 };
 
 window.onAtprotoSignedOut = function(){
   isSignedIn = false;
   signedInHandle = null;
+  currentSignedInDid = null;
   atprotoProfile = null;
-  loadFromStorage();
+  customAvatar = null;
+  items = [];
+
+  TYPE_META = structuredClone(DEFAULT_TYPE_META);
+  STATUS_META = structuredClone(DEFAULT_STATUS_META);
+  GENRE_META = structuredClone(DEFAULT_GENRE_META);
+  SETTINGS = structuredClone(DEFAULT_SETTINGS);
+  populateTypeSelect();
+  populateStatusSelect();
+  populateFilterGenreSelect();
+  applySettings();
+
   renderStats(); renderGrid();
   applyAuthGate();
   closeProfile();
@@ -1068,7 +1097,7 @@ function onAvatarFileChange(){
   const reader = new FileReader();
   reader.onload = e => {
     customAvatar = e.target.result;
-    try { localStorage.setItem('shelflog-avatar', customAvatar); } catch (err) { /* ignore */ }
+    persistAvatar();
     renderProfileSection();
     renderTopbarAvatar(getDisplayAvatar(atprotoProfile && atprotoProfile.avatar));
   };
@@ -1077,7 +1106,7 @@ function onAvatarFileChange(){
 
 function resetAvatar(){
   customAvatar = null;
-  try { localStorage.removeItem('shelflog-avatar'); } catch (err) { /* ignore */ }
+  persistAvatar();
   renderProfileSection();
   renderTopbarAvatar(getDisplayAvatar(atprotoProfile && atprotoProfile.avatar));
 }

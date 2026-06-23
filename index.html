@@ -103,6 +103,10 @@
     .genre-picker { display: flex; flex-wrap: wrap; gap: 6px; }
     .genre-chip { font-size: 11px; padding: 4px 10px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); color: var(--muted); cursor: pointer; font-family: inherit; }
     .genre-chip.active { border-color: transparent; font-weight: 500; }
+    .autofill-list { position: absolute; top: 100%; left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-top: 4px; max-height: 220px; overflow-y: auto; z-index: 6; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+    .autofill-item { padding: 8px 10px; display: flex; justify-content: space-between; gap: 8px; cursor: pointer; font-size: 13px; color: var(--ink); }
+    .autofill-item:hover { background: var(--card); }
+    .autofill-item span:last-child { color: var(--muted-light); font-size: 11px; flex-shrink: 0; }
     .theme-preview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
     .theme-preview { border: 2px solid var(--border); border-radius: 10px; padding: 8px; cursor: pointer; text-align: center; }
     .theme-preview:hover { border-color: var(--muted-light); }
@@ -292,6 +296,23 @@
       </div>
 
       <div>
+        <div class="modal-section">Autofill (optional)</div>
+        <div style="font-size:12px;color:var(--muted-light);margin-bottom:8px">
+          Books and music autofill automatically. Movies/TV and games need a free API key below to enable suggestions for those types.
+        </div>
+        <div class="form-row" style="margin-bottom:10px">
+          <div class="form-group">
+            <label class="form-label">TMDb API key (movies/TV)</label>
+            <input type="text" id="setting-tmdb-key" placeholder="Paste your TMDb key">
+          </div>
+          <div class="form-group">
+            <label class="form-label">RAWG API key (games)</label>
+            <input type="text" id="setting-rawg-key" placeholder="Paste your RAWG key">
+          </div>
+        </div>
+      </div>
+
+      <div>
         <div class="modal-section" style="color:var(--rating-low)">Danger zone</div>
         <button class="btn" style="border-color:var(--rating-low);color:var(--rating-low)" onclick="deleteAllItems()"><i class="ti ti-trash" aria-hidden="true"></i> Delete all items</button>
       </div>
@@ -389,7 +410,11 @@
         <input type="file" id="f-poster" accept="image/*" style="display:none" onchange="previewPoster()">
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label" id="label-title">Title</label><input type="text" id="f-title" placeholder="e.g. Dune"></div>
+        <div class="form-group" style="position:relative">
+          <label class="form-label" id="label-title">Title</label>
+          <input type="text" id="f-title" placeholder="e.g. Dune" oninput="handleTitleInput()" autocomplete="off">
+          <div class="autofill-list" id="autofillList" style="display:none"></div>
+        </div>
         <div class="form-group"><label class="form-label" id="label-creator">Creator</label><input type="text" id="f-creator" placeholder="Author, director, band..."></div>
       </div>
       <div class="form-row">
@@ -544,6 +569,7 @@ const DEFAULT_SETTINGS = {
   addButtonLabel: 'log something',
   fieldLabels: { title:'Title', creator:'Creator', year:'Year', review:'Review / notes' },
   theme: 'nature',
+  apiKeys: { tmdb:'', rawg:'' },
 };
 let SETTINGS = structuredClone(DEFAULT_SETTINGS);
 
@@ -716,6 +742,10 @@ document.addEventListener('click', e=>{
   if (panel.style.display !== 'none' && wrap && !wrap.contains(e.target)) {
     panel.style.display = 'none';
   }
+  const autofillList = document.getElementById('autofillList');
+  if (autofillList && autofillList.style.display !== 'none' && e.target.id !== 'f-title' && !autofillList.contains(e.target)) {
+    autofillList.style.display = 'none';
+  }
 });
 
 function populateFilterStatusSelect(){
@@ -790,6 +820,132 @@ function openEditItem(id){
 }
 let formTags = [];
 let formGenres = [];
+let autofillTimer = null;
+let autofillResults = [];
+
+const TMDB_GENRE_MAP = {
+  28:'Action', 12:'Adventure', 16:'Animation', 35:'Comedy', 80:'Crime', 99:'Documentary',
+  18:'Drama', 10751:'Family', 14:'Fantasy', 36:'History', 27:'Horror', 10402:'Music',
+  9648:'Mystery', 10749:'Romance', 878:'Sci-Fi', 10770:'TV Movie', 53:'Thriller',
+  10752:'War', 37:'Western', 10759:'Action', 10765:'Sci-Fi', 10762:'Family', 10763:'Documentary',
+};
+
+function handleTitleInput(){
+  const q = document.getElementById('f-title').value.trim();
+  const list = document.getElementById('autofillList');
+  clearTimeout(autofillTimer);
+  if (q.length < 2) { list.style.display = 'none'; list.innerHTML = ''; return; }
+  autofillTimer = setTimeout(() => runAutofillSearch(q), 400);
+}
+
+async function runAutofillSearch(query){
+  const type = document.getElementById('f-type').value;
+  let results = [];
+  try {
+    if (type === 'book') results = await searchOpenLibrary(query);
+    else if (type === 'music') results = await searchMusicBrainz(query);
+    else if ((type === 'movie' || type === 'tv') && SETTINGS.apiKeys && SETTINGS.apiKeys.tmdb) results = await searchTMDb(query, type);
+    else if (type === 'game' && SETTINGS.apiKeys && SETTINGS.apiKeys.rawg) results = await searchRAWG(query);
+  } catch (err) {
+    console.warn('Autofill search failed:', err);
+    results = [];
+  }
+  renderAutofillList(results);
+}
+
+function renderAutofillList(results){
+  autofillResults = results;
+  const list = document.getElementById('autofillList');
+  if (!results.length) { list.style.display = 'none'; list.innerHTML = ''; return; }
+  list.innerHTML = results.map((r, i) =>
+    `<div class="autofill-item" onclick="selectAutofillResult(${i})"><span>${r.title}</span><span>${r.year || ''}</span></div>`
+  ).join('');
+  list.style.display = 'block';
+}
+
+async function selectAutofillResult(i){
+  const r = autofillResults[i];
+  if (!r) return;
+  document.getElementById('f-title').value = r.title;
+  document.getElementById('f-year').value = r.year || '';
+  document.getElementById('autofillList').style.display = 'none';
+
+  if (r.creator) document.getElementById('f-creator').value = r.creator;
+  if (r.resolveCreator) {
+    try {
+      const creator = await r.resolveCreator();
+      if (creator) document.getElementById('f-creator').value = creator;
+    } catch (err) { console.warn('Could not resolve creator:', err); }
+  }
+
+  if (r.genreNames && r.genreNames.length) {
+    r.genreNames.forEach(name => {
+      const key = Object.keys(GENRE_META).find(k => GENRE_META[k].label.toLowerCase() === name.toLowerCase());
+      if (key && !formGenres.includes(key)) formGenres.push(key);
+    });
+    renderGenrePicker();
+  }
+}
+
+async function searchOpenLibrary(query){
+  const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=5`);
+  const data = await res.json();
+  return (data.docs || []).map(d => ({
+    title: d.title,
+    year: d.first_publish_year ? String(d.first_publish_year) : '',
+    creator: (d.author_name && d.author_name[0]) || '',
+  }));
+}
+
+async function searchMusicBrainz(query){
+  const res = await fetch(`https://musicbrainz.org/ws/2/release-group/?query=${encodeURIComponent(query)}&fmt=json&limit=5`);
+  const data = await res.json();
+  return (data['release-groups'] || []).map(rg => ({
+    title: rg.title,
+    year: rg['first-release-date'] ? rg['first-release-date'].slice(0, 4) : '',
+    creator: (rg['artist-credit'] && rg['artist-credit'][0] && rg['artist-credit'][0].name) || '',
+  }));
+}
+
+async function searchTMDb(query, type){
+  const key = SETTINGS.apiKeys.tmdb;
+  const endpoint = type === 'tv' ? 'tv' : 'movie';
+  const res = await fetch(`https://api.themoviedb.org/3/search/${endpoint}?api_key=${key}&query=${encodeURIComponent(query)}`);
+  const data = await res.json();
+  return (data.results || []).slice(0, 5).map(r => ({
+    title: r.title || r.name,
+    year: (r.release_date || r.first_air_date || '').slice(0, 4),
+    genreNames: (r.genre_ids || []).map(id => TMDB_GENRE_MAP[id]).filter(Boolean),
+    resolveCreator: async () => {
+      if (endpoint === 'movie') {
+        const cres = await fetch(`https://api.themoviedb.org/3/movie/${r.id}/credits?api_key=${key}`);
+        const cdata = await cres.json();
+        const director = (cdata.crew || []).find(c => c.job === 'Director');
+        return director ? director.name : '';
+      } else {
+        const dres = await fetch(`https://api.themoviedb.org/3/tv/${r.id}?api_key=${key}`);
+        const ddata = await dres.json();
+        return (ddata.created_by && ddata.created_by[0] && ddata.created_by[0].name) || '';
+      }
+    },
+  }));
+}
+
+async function searchRAWG(query){
+  const key = SETTINGS.apiKeys.rawg;
+  const res = await fetch(`https://api.rawg.io/api/games?key=${key}&search=${encodeURIComponent(query)}&page_size=5`);
+  const data = await res.json();
+  return (data.results || []).map(g => ({
+    title: g.name,
+    year: (g.released || '').slice(0, 4),
+    genreNames: (g.genres || []).map(x => x.name),
+    resolveCreator: async () => {
+      const dres = await fetch(`https://api.rawg.io/api/games/${g.id}?key=${key}`);
+      const ddata = await dres.json();
+      return (ddata.developers && ddata.developers[0] && ddata.developers[0].name) || '';
+    },
+  }));
+}
 
 let addingGenreInline = false;
 
@@ -1037,6 +1193,8 @@ function openSettings(){
   document.getElementById('setting-label-creator').value = SETTINGS.fieldLabels.creator;
   document.getElementById('setting-label-year').value = SETTINGS.fieldLabels.year;
   document.getElementById('setting-label-review').value = SETTINGS.fieldLabels.review;
+  document.getElementById('setting-tmdb-key').value = (SETTINGS.apiKeys && SETTINGS.apiKeys.tmdb) || '';
+  document.getElementById('setting-rawg-key').value = (SETTINGS.apiKeys && SETTINGS.apiKeys.rawg) || '';
   editingStatusKey = null;
   renderStatusList();
   document.getElementById('settingsModal').classList.add('open');
@@ -1103,6 +1261,10 @@ function saveSettings(){
   SETTINGS.fieldLabels.creator = document.getElementById('setting-label-creator').value.trim() || 'Creator';
   SETTINGS.fieldLabels.year = document.getElementById('setting-label-year').value.trim() || 'Year';
   SETTINGS.fieldLabels.review = document.getElementById('setting-label-review').value.trim() || 'Review / notes';
+  SETTINGS.apiKeys = {
+    tmdb: document.getElementById('setting-tmdb-key').value.trim(),
+    rawg: document.getElementById('setting-rawg-key').value.trim(),
+  };
   persistSettings();
   applySettings();
   closeSettings();
@@ -1467,6 +1629,8 @@ function closeDetail(){document.getElementById('detailModal').classList.remove('
 function resetAddForm(){
   document.getElementById('f-title').value = '';
   document.getElementById('f-creator').value = '';
+  document.getElementById('autofillList').style.display = 'none';
+  document.getElementById('autofillList').innerHTML = '';
   if (activeType !== 'all' && TYPE_META[activeType]) {
     document.getElementById('f-type').value = activeType;
   } else {

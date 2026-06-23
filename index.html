@@ -292,6 +292,11 @@
       </div>
 
       <div>
+        <div class="modal-section" style="color:var(--rating-low)">Danger zone</div>
+        <button class="btn" style="border-color:var(--rating-low);color:var(--rating-low)" onclick="deleteAllItems()"><i class="ti ti-trash" aria-hidden="true"></i> Delete all items</button>
+      </div>
+
+      <div>
         <div class="modal-section">Features</div>
         <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
           <input type="checkbox" id="setting-ratings" style="width:auto">
@@ -1522,6 +1527,21 @@ function closeAdd(){
 function toggleOtherType(){
   const isOther = document.getElementById('f-type').value === 'other';
   document.getElementById('f-other-type-wrap').style.display = isOther ? 'flex' : 'none';
+}
+
+async function deleteAllItems(){
+  if (!items.length) { alert('Nothing to delete.'); return; }
+  if (!confirm(`Delete all ${items.length} item(s) in this account? This can't be undone.`)) return;
+  closeSettings();
+  if (isSignedIn) {
+    for (const item of items.slice()) {
+      await window.atprotoDeleteItem(item.id);
+    }
+  }
+  items = [];
+  if (!isSignedIn) saveToStorage();
+  currentPage = 1;
+  renderStats(); renderGrid();
 }
 
 async function deleteItem(id){

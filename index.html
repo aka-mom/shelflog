@@ -1955,10 +1955,19 @@ async function resolvePdsUrl(did){
   return resolvedPdsUrl;
 }
 
+function extractBlobCid(posterRef){
+  if (!posterRef) return null;
+  if (posterRef.ref && posterRef.ref.$link) return posterRef.ref.$link;
+  if (posterRef.original && posterRef.original.ref && posterRef.original.ref.$link) return posterRef.original.ref.$link;
+  if (posterRef.ref && typeof posterRef.ref.toString === 'function') return posterRef.ref.toString();
+  return null;
+}
+
 window.atprotoResolvePosterUrl = async function(posterRef){
-  if (!posterRef || !posterRef.ref || !posterRef.ref.$link) return null;
+  const cid = extractBlobCid(posterRef);
+  if (!cid) return null;
   const pdsUrl = await resolvePdsUrl(currentDid);
-  const blobUrl = `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(currentDid)}&cid=${encodeURIComponent(posterRef.ref.$link)}`;
+  const blobUrl = `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(currentDid)}&cid=${encodeURIComponent(cid)}`;
   const res = await fetch(blobUrl);
   if (!res.ok) throw new Error(`getBlob failed with status ${res.status}`);
   const arrayBuffer = await res.arrayBuffer();

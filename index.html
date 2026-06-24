@@ -1721,6 +1721,11 @@ function addItem(){
   const pendingTag=document.getElementById('f-tag-input').value.trim();
   if (pendingTag && !formTags.includes(pendingTag)) formTags.push(pendingTag);
 
+  const submitBtn = document.getElementById('addSubmitBtn');
+  const savingLabel = editingItemId !== null ? 'Saving...' : 'Adding...';
+  submitBtn.disabled = true;
+  submitBtn.textContent = savingLabel;
+
   async function finish(poster){
     const fields = {
       title,
@@ -1747,35 +1752,42 @@ function addItem(){
       return { posterRef: null, previewUrl: null };
     }
 
-    if (editingItemId !== null) {
-      const idx = items.findIndex(i => String(i.id) === String(editingItemId));
-      if (isSignedIn) {
-        const { posterRef, previewUrl } = await resolvePosterForSignedIn(editingItemId);
+    try {
+      if (editingItemId !== null) {
+        const idx = items.findIndex(i => String(i.id) === String(editingItemId));
+        if (isSignedIn) {
+          const { posterRef, previewUrl } = await resolvePosterForSignedIn(editingItemId);
+          fields.poster = posterRef;
+          await window.atprotoUpdateItem(editingItemId, fields);
+          if (idx !== -1) items[idx] = { ...fields, id: editingItemId, poster: previewUrl, posterRef };
+        } else {
+          if (idx !== -1) items[idx] = { ...fields, id: editingItemId, poster: poster || items[idx].poster };
+          saveToStorage();
+        }
+      } else if (isSignedIn) {
+        const { posterRef, previewUrl } = await resolvePosterForSignedIn(null);
         fields.poster = posterRef;
-        await window.atprotoUpdateItem(editingItemId, fields);
-        if (idx !== -1) items[idx] = { ...fields, id: editingItemId, poster: previewUrl, posterRef };
+        const id = await window.atprotoCreateItem(fields);
+        items.unshift({ ...fields, id, poster: previewUrl, posterRef });
       } else {
-        if (idx !== -1) items[idx] = { ...fields, id: editingItemId, poster: poster || items[idx].poster };
+        items.unshift({ ...fields, id: nextId++, poster });
         saveToStorage();
       }
-    } else if (isSignedIn) {
-      const { posterRef, previewUrl } = await resolvePosterForSignedIn(null);
-      fields.poster = posterRef;
-      const id = await window.atprotoCreateItem(fields);
-      items.unshift({ ...fields, id, poster: previewUrl, posterRef });
-    } else {
-      items.unshift({ ...fields, id: nextId++, poster });
-      saveToStorage();
-    }
 
-    ['f-title','f-creator','f-year','f-review','f-other-type'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('f-completed').checked=false;
-    resetPosterUpload();
-    resetStarPicker();
-    resetTagInput();
-    resetGenrePicker();
-    toggleOtherType();
-    closeAdd(); renderStats(); renderGrid();
+      ['f-title','f-creator','f-year','f-review','f-other-type'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('f-completed').checked=false;
+      resetPosterUpload();
+      resetStarPicker();
+      resetTagInput();
+      resetGenrePicker();
+      toggleOtherType();
+      closeAdd(); renderStats(); renderGrid();
+    } catch (err) {
+      console.error('Save failed:', err);
+      alert('Save failed: ' + err.message);
+      submitBtn.disabled = false;
+      submitBtn.textContent = editingItemId !== null ? 'Save changes' : 'Add to log';
+    }
   }
 
   const file=document.getElementById('f-poster').files[0];

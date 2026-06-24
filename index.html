@@ -691,7 +691,7 @@ window.onAtprotoSignedOut = function(){
   currentSignedInDid = null;
   atprotoProfile = null;
   customAvatar = null;
-  resolvedPdsUrl = null;
+  if (window.atprotoResetPdsCache) window.atprotoResetPdsCache();
   items = [];
 
   TYPE_META = structuredClone(DEFAULT_TYPE_META);
@@ -1931,6 +1931,10 @@ window.atprotoUploadBlob = async function(dataUrl){
 };
 
 let resolvedPdsUrl = null;
+
+window.atprotoResetPdsCache = function(){
+  resolvedPdsUrl = null;
+};
 
 async function resolvePdsUrl(did){
   if (resolvedPdsUrl) return resolvedPdsUrl;

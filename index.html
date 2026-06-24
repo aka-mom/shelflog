@@ -861,7 +861,7 @@ async function runAutofillSearch(query){
     else if (type === 'music') results = await searchMusicBrainz(query);
     else if (type === 'movie' || type === 'tv') results = await searchTMDb(query, type);
     else if (type === 'game') results = await searchRAWG(query);
-    else if (type === 'musical' || type === 'play') results = await searchWikidataStage(query);
+    else if (type === 'musical' || type === 'play') results = await searchWikidataStage(query, type);
   } catch (err) {
     console.warn('Autofill search failed:', err);
     results = [];
@@ -974,14 +974,30 @@ async function searchRAWG(query){
   }));
 }
 
-async function searchWikidataStage(query){
-  const res = await fetch(`https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(query)}&language=en&format=json&origin=*&type=item&limit=5`);
+async function searchWikidataStage(query, type){
+  const classId = type === 'musical' ? 'Q2743' : 'Q25379';
+  const safeQuery = query.replace(/"/g, '');
+  const sparql = `SELECT ?item ?itemLabel ?itemDescription WHERE {
+    SERVICE wikibase:mwapi {
+      bd:serviceParam wikibase:api "EntitySearch".
+      bd:serviceParam wikibase:endpoint "www.wikidata.org".
+      bd:serviceParam mwapi:search "${safeQuery}".
+      bd:serviceParam mwapi:language "en".
+      ?item wikibase:apiOutputItem mwapi:item.
+    }
+    ?item wdt:P31/wdt:P279* wd:${classId}.
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+  } LIMIT 5`;
+  const res = await fetch(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(sparql)}`);
   const data = await res.json();
-  return (data.search || []).map(item => ({
-    title: item.label,
-    subtitle: item.description || '',
-    resolveDetails: async () => resolveWikidataDetails(item.id),
-  }));
+  return (data.results.bindings || []).map(b => {
+    const qid = b.item.value.split('/').pop();
+    return {
+      title: b.itemLabel ? b.itemLabel.value : qid,
+      subtitle: b.itemDescription ? b.itemDescription.value : '',
+      resolveDetails: async () => resolveWikidataDetails(qid),
+    };
+  });
 }
 
 async function resolveWikidataDetails(qid){

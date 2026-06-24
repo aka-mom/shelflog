@@ -44,6 +44,7 @@
     .pagination-info button:disabled { opacity: 0.4; cursor: default; }
     .pagination-info button:not(:disabled):hover { border-color: var(--teal); }
     .filter-panel { position: absolute; top: calc(100% + 6px); right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; width: 200px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 10px; z-index: 5; }
+    .avatar-menu { position: absolute; top: calc(100% + 6px); left: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px; width: 170px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 2px; z-index: 9; }
     .search-wrap { position: relative; }
     .grid-heading { padding: 16px 20px 0; font-size: 13px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .search-wrap input { padding: 5px 12px 5px 32px; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); font-family: inherit; width: 320px; }
@@ -148,8 +149,13 @@
       </div>
       <span id="appName">shelflog</span>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn" id="topbarAvatarBtn" onclick="openProfile()" aria-label="Profile" style="padding:4px 9px"></button>
+    <div style="display:flex;gap:8px;align-items:center;position:relative">
+      <button class="btn" id="topbarAvatarBtn" onclick="onTopbarAvatarClick(event)" aria-label="Profile" style="padding:4px 9px"></button>
+      <div class="avatar-menu" id="avatarMenu" style="display:none">
+        <button class="side-link" onclick="closeAvatarMenu();openProfile()"><i class="ti ti-user-circle" aria-hidden="true"></i> Profile</button>
+        <button class="side-link" onclick="closeAvatarMenu();openSettings()"><i class="ti ti-settings" aria-hidden="true"></i> Settings</button>
+        <button class="side-link" onclick="closeAvatarMenu();window.atprotoSignOut()"><i class="ti ti-logout" aria-hidden="true"></i> Sign out</button>
+      </div>
       <button class="btn btn-primary" onclick="openAdd()">
         <i class="ti ti-plus" aria-hidden="true"></i> <span id="addBtnLabel">log something</span>
       </button>
@@ -736,7 +742,26 @@ document.addEventListener('click', e=>{
   if (autofillList && autofillList.style.display !== 'none' && e.target.id !== 'f-title' && !autofillList.contains(e.target)) {
     autofillList.style.display = 'none';
   }
+  const avatarMenu = document.getElementById('avatarMenu');
+  const avatarBtn = document.getElementById('topbarAvatarBtn');
+  if (avatarMenu.style.display !== 'none' && !avatarMenu.contains(e.target) && !avatarBtn.contains(e.target)) {
+    avatarMenu.style.display = 'none';
+  }
 });
+
+function onTopbarAvatarClick(e){
+  if (SETTINGS.categoriesEnabled) {
+    openProfile();
+    return;
+  }
+  e.stopPropagation();
+  const menu = document.getElementById('avatarMenu');
+  menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
+}
+
+function closeAvatarMenu(){
+  document.getElementById('avatarMenu').style.display = 'none';
+}
 
 function populateFilterStatusSelect(){
   const sel = document.getElementById('filter-status');

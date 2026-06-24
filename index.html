@@ -691,6 +691,7 @@ window.onAtprotoSignedOut = function(){
   currentSignedInDid = null;
   atprotoProfile = null;
   customAvatar = null;
+  resolvedPdsUrl = null;
   items = [];
 
   TYPE_META = structuredClone(DEFAULT_TYPE_META);
@@ -1929,10 +1930,35 @@ window.atprotoUploadBlob = async function(dataUrl){
   return res.data.blob;
 };
 
+let resolvedPdsUrl = null;
+
+async function resolvePdsUrl(did){
+  if (resolvedPdsUrl) return resolvedPdsUrl;
+  let didDoc;
+  if (did.startsWith('did:plc:')) {
+    const res = await fetch(`https://plc.directory/${did}`);
+    didDoc = await res.json();
+  } else if (did.startsWith('did:web:')) {
+    const domain = did.replace('did:web:', '').split(':').map(decodeURIComponent).join('/');
+    const res = await fetch(`https://${domain}/.well-known/did.json`);
+    didDoc = await res.json();
+  } else {
+    throw new Error('Unsupported DID method for PDS resolution');
+  }
+  const pdsService = (didDoc.service || []).find(s => s.id === '#atproto_pds');
+  if (!pdsService) throw new Error('Could not find PDS service endpoint in DID document');
+  resolvedPdsUrl = pdsService.serviceEndpoint;
+  return resolvedPdsUrl;
+}
+
 window.atprotoResolvePosterUrl = async function(posterRef){
   if (!posterRef || !posterRef.ref || !posterRef.ref.$link) return null;
-  const res = await currentAgent.com.atproto.sync.getBlob({ did: currentDid, cid: posterRef.ref.$link });
-  const blob = new Blob([res.data], { type: posterRef.mimeType || 'image/jpeg' });
+  const pdsUrl = await resolvePdsUrl(currentDid);
+  const blobUrl = `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(currentDid)}&cid=${encodeURIComponent(posterRef.ref.$link)}`;
+  const res = await fetch(blobUrl);
+  if (!res.ok) throw new Error(`getBlob failed with status ${res.status}`);
+  const arrayBuffer = await res.arrayBuffer();
+  const blob = new Blob([arrayBuffer], { type: posterRef.mimeType || 'image/jpeg' });
   return URL.createObjectURL(blob);
 };
 

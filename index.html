@@ -296,19 +296,9 @@
       </div>
 
       <div>
-        <div class="modal-section">Autofill (optional)</div>
-        <div style="font-size:12px;color:var(--muted-light);margin-bottom:8px">
-          Books and music autofill automatically. Movies/TV and games need a free API key below to enable suggestions for those types.
-        </div>
-        <div class="form-row" style="margin-bottom:10px">
-          <div class="form-group">
-            <label class="form-label">TMDb API key (movies/TV)</label>
-            <input type="text" id="setting-tmdb-key" placeholder="Paste your TMDb key">
-          </div>
-          <div class="form-group">
-            <label class="form-label">RAWG API key (games)</label>
-            <input type="text" id="setting-rawg-key" placeholder="Paste your RAWG key">
-          </div>
+        <div class="modal-section">Autofill</div>
+        <div style="font-size:12px;color:var(--muted-light)">
+          Title suggestions for movies, TV, books, music, and games are on automatically.
         </div>
       </div>
 
@@ -569,7 +559,6 @@ const DEFAULT_SETTINGS = {
   addButtonLabel: 'log something',
   fieldLabels: { title:'Title', creator:'Creator', year:'Year', review:'Review / notes' },
   theme: 'nature',
-  apiKeys: { tmdb:'', rawg:'' },
 };
 let SETTINGS = structuredClone(DEFAULT_SETTINGS);
 
@@ -844,8 +833,8 @@ async function runAutofillSearch(query){
   try {
     if (type === 'book') results = await searchOpenLibrary(query);
     else if (type === 'music') results = await searchMusicBrainz(query);
-    else if ((type === 'movie' || type === 'tv') && SETTINGS.apiKeys && SETTINGS.apiKeys.tmdb) results = await searchTMDb(query, type);
-    else if (type === 'game' && SETTINGS.apiKeys && SETTINGS.apiKeys.rawg) results = await searchRAWG(query);
+    else if (type === 'movie' || type === 'tv') results = await searchTMDb(query, type);
+    else if (type === 'game') results = await searchRAWG(query);
   } catch (err) {
     console.warn('Autofill search failed:', err);
     results = [];
@@ -907,10 +896,11 @@ async function searchMusicBrainz(query){
   }));
 }
 
+const AUTOFILL_PROXY = 'https://calm-meadow-103a.bunneescorner.workers.dev';
+
 async function searchTMDb(query, type){
-  const key = SETTINGS.apiKeys.tmdb;
   const endpoint = type === 'tv' ? 'tv' : 'movie';
-  const res = await fetch(`https://api.themoviedb.org/3/search/${endpoint}?api_key=${key}&query=${encodeURIComponent(query)}`);
+  const res = await fetch(`${AUTOFILL_PROXY}/tmdb/search?type=${endpoint}&query=${encodeURIComponent(query)}`);
   const data = await res.json();
   return (data.results || []).slice(0, 5).map(r => ({
     title: r.title || r.name,
@@ -918,12 +908,12 @@ async function searchTMDb(query, type){
     genreNames: (r.genre_ids || []).map(id => TMDB_GENRE_MAP[id]).filter(Boolean),
     resolveCreator: async () => {
       if (endpoint === 'movie') {
-        const cres = await fetch(`https://api.themoviedb.org/3/movie/${r.id}/credits?api_key=${key}`);
+        const cres = await fetch(`${AUTOFILL_PROXY}/tmdb/movie-credits?id=${r.id}`);
         const cdata = await cres.json();
         const director = (cdata.crew || []).find(c => c.job === 'Director');
         return director ? director.name : '';
       } else {
-        const dres = await fetch(`https://api.themoviedb.org/3/tv/${r.id}?api_key=${key}`);
+        const dres = await fetch(`${AUTOFILL_PROXY}/tmdb/tv-details?id=${r.id}`);
         const ddata = await dres.json();
         return (ddata.created_by && ddata.created_by[0] && ddata.created_by[0].name) || '';
       }
@@ -932,15 +922,14 @@ async function searchTMDb(query, type){
 }
 
 async function searchRAWG(query){
-  const key = SETTINGS.apiKeys.rawg;
-  const res = await fetch(`https://api.rawg.io/api/games?key=${key}&search=${encodeURIComponent(query)}&page_size=5`);
+  const res = await fetch(`${AUTOFILL_PROXY}/rawg/search?query=${encodeURIComponent(query)}`);
   const data = await res.json();
   return (data.results || []).map(g => ({
     title: g.name,
     year: (g.released || '').slice(0, 4),
     genreNames: (g.genres || []).map(x => x.name),
     resolveCreator: async () => {
-      const dres = await fetch(`https://api.rawg.io/api/games/${g.id}?key=${key}`);
+      const dres = await fetch(`${AUTOFILL_PROXY}/rawg/game-details?id=${g.id}`);
       const ddata = await dres.json();
       return (ddata.developers && ddata.developers[0] && ddata.developers[0].name) || '';
     },
@@ -1193,8 +1182,6 @@ function openSettings(){
   document.getElementById('setting-label-creator').value = SETTINGS.fieldLabels.creator;
   document.getElementById('setting-label-year').value = SETTINGS.fieldLabels.year;
   document.getElementById('setting-label-review').value = SETTINGS.fieldLabels.review;
-  document.getElementById('setting-tmdb-key').value = (SETTINGS.apiKeys && SETTINGS.apiKeys.tmdb) || '';
-  document.getElementById('setting-rawg-key').value = (SETTINGS.apiKeys && SETTINGS.apiKeys.rawg) || '';
   editingStatusKey = null;
   renderStatusList();
   document.getElementById('settingsModal').classList.add('open');
@@ -1261,10 +1248,6 @@ function saveSettings(){
   SETTINGS.fieldLabels.creator = document.getElementById('setting-label-creator').value.trim() || 'Creator';
   SETTINGS.fieldLabels.year = document.getElementById('setting-label-year').value.trim() || 'Year';
   SETTINGS.fieldLabels.review = document.getElementById('setting-label-review').value.trim() || 'Review / notes';
-  SETTINGS.apiKeys = {
-    tmdb: document.getElementById('setting-tmdb-key').value.trim(),
-    rawg: document.getElementById('setting-rawg-key').value.trim(),
-  };
   persistSettings();
   applySettings();
   closeSettings();

@@ -861,6 +861,7 @@ async function runAutofillSearch(query){
     else if (type === 'music') results = await searchMusicBrainz(query);
     else if (type === 'movie' || type === 'tv') results = await searchTMDb(query, type);
     else if (type === 'game') results = await searchRAWG(query);
+    else if (type === 'musical' || type === 'play') results = await searchWikidataStage(query);
   } catch (err) {
     console.warn('Autofill search failed:', err);
     results = [];
@@ -873,9 +874,17 @@ function renderAutofillList(results){
   const list = document.getElementById('autofillList');
   if (!results.length) { list.style.display = 'none'; list.innerHTML = ''; return; }
   list.innerHTML = results.map((r, i) =>
-    `<div class="autofill-item" onclick="selectAutofillResult(${i})"><span>${r.title}</span><span>${r.year || ''}</span></div>`
+    `<div class="autofill-item" onclick="selectAutofillResult(${i})"><span>${r.title}</span><span style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.year || r.subtitle || ''}</span></div>`
   ).join('');
   list.style.display = 'block';
+}
+
+function applyGenreNames(names){
+  names.forEach(name => {
+    const key = Object.keys(GENRE_META).find(k => GENRE_META[k].label.toLowerCase() === name.toLowerCase());
+    if (key && !formGenres.includes(key)) formGenres.push(key);
+  });
+  renderGenrePicker();
 }
 
 async function selectAutofillResult(i){
@@ -893,13 +902,16 @@ async function selectAutofillResult(i){
     } catch (err) { console.warn('Could not resolve creator:', err); }
   }
 
-  if (r.genreNames && r.genreNames.length) {
-    r.genreNames.forEach(name => {
-      const key = Object.keys(GENRE_META).find(k => GENRE_META[k].label.toLowerCase() === name.toLowerCase());
-      if (key && !formGenres.includes(key)) formGenres.push(key);
-    });
-    renderGenrePicker();
+  if (r.resolveDetails) {
+    try {
+      const details = await r.resolveDetails();
+      if (details.year) document.getElementById('f-year').value = details.year;
+      if (details.creator) document.getElementById('f-creator').value = details.creator;
+      if (details.genreNames && details.genreNames.length) applyGenreNames(details.genreNames);
+    } catch (err) { console.warn('Could not resolve details:', err); }
   }
+
+  if (r.genreNames && r.genreNames.length) applyGenreNames(r.genreNames);
 }
 
 async function searchOpenLibrary(query){
@@ -960,6 +972,55 @@ async function searchRAWG(query){
       return (ddata.developers && ddata.developers[0] && ddata.developers[0].name) || '';
     },
   }));
+}
+
+async function searchWikidataStage(query){
+  const res = await fetch(`https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(query)}&language=en&format=json&origin=*&type=item&limit=5`);
+  const data = await res.json();
+  return (data.search || []).map(item => ({
+    title: item.label,
+    subtitle: item.description || '',
+    resolveDetails: async () => resolveWikidataDetails(item.id),
+  }));
+}
+
+async function resolveWikidataDetails(qid){
+  const res = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${qid}&format=json&origin=*&props=claims`);
+  const data = await res.json();
+  const claims = (data.entities && data.entities[qid] && data.entities[qid].claims) || {};
+
+  const getEntityIds = (prop) => (claims[prop] || [])
+    .map(c => c.mainsnak && c.mainsnak.datavalue && c.mainsnak.datavalue.value && c.mainsnak.datavalue.value.id)
+    .filter(Boolean);
+  const getYear = (prop) => {
+    const c = claims[prop] && claims[prop][0];
+    const time = c && c.mainsnak && c.mainsnak.datavalue && c.mainsnak.datavalue.value && c.mainsnak.datavalue.value.time;
+    return time ? time.replace('+', '').slice(0, 4) : '';
+  };
+
+  const year = getYear('P577') || getYear('P571');
+  const composerIds = getEntityIds('P86');
+  const directorIds = getEntityIds('P57');
+  const authorIds = getEntityIds('P50');
+  const creatorIds = composerIds.length ? composerIds : (directorIds.length ? directorIds : authorIds);
+  const genreIds = getEntityIds('P136');
+
+  const idsToResolve = [...creatorIds.slice(0, 1), ...genreIds].filter(Boolean);
+  const labels = {};
+  if (idsToResolve.length) {
+    const lres = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${idsToResolve.join('|')}&format=json&origin=*&props=labels&languages=en`);
+    const ldata = await lres.json();
+    Object.keys(ldata.entities || {}).forEach(id => {
+      const ent = ldata.entities[id];
+      labels[id] = ent.labels && ent.labels.en && ent.labels.en.value;
+    });
+  }
+
+  return {
+    year,
+    creator: creatorIds[0] ? (labels[creatorIds[0]] || '') : '',
+    genreNames: genreIds.map(id => labels[id]).filter(Boolean),
+  };
 }
 
 let addingGenreInline = false;

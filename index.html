@@ -975,7 +975,7 @@ async function searchRAWG(query){
 }
 
 async function searchWikidataStage(query, type){
-  const classId = type === 'musical' ? 'Q2743' : 'Q25379';
+  const classId = 'Q116476516';
   const safeQuery = query.replace(/"/g, '');
   const sparql = `SELECT ?item ?itemLabel ?itemDescription WHERE {
     SERVICE wikibase:mwapi {
